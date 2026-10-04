@@ -97,7 +97,6 @@ public class Client {
         this.planType = planType;
     }
 
-
     public void activate(){
         this.active = true;
     }
