@@ -1,5 +1,8 @@
 package com.irrah.desafio_tecnico.client;
 
+import com.irrah.desafio_tecnico.billing.FinancialTransaction;
+import com.irrah.desafio_tecnico.billing.FinancialTransactionRepository;
+import com.irrah.desafio_tecnico.billing.TransactionType;
 import com.irrah.desafio_tecnico.client.dto.*;
 import com.irrah.desafio_tecnico.client.exception.ClientNotFoundException;
 import com.irrah.desafio_tecnico.client.exception.DuplicateDocumentException;
@@ -9,6 +12,7 @@ import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import java.time.Instant;
 import java.util.List;
 
 @RequiredArgsConstructor
@@ -16,6 +20,7 @@ import java.util.List;
 public class ClientService {
 
     private final ClientRepository clientRepository;
+    private final FinancialTransactionRepository financialTransactionRepository;
 
     public AuthResponse authenticate(AuthRequest request) {
         String document = DocumentValidator.normalizeAndValidate(
@@ -104,6 +109,31 @@ public class ClientService {
         clientRepository.save(target);
 
         return UpdateResponse.builder().clientId(clientId).build();
+    }
+
+    @Transactional
+    public CreditResponse addCredit(Long id, CreditRequest request){
+        Client target = clientRepository.findById(id).orElseThrow(ClientNotFoundException::new);
+
+        target.credit(request.amount());
+
+        FinancialTransaction transaction = new FinancialTransaction(
+                target,
+                TransactionType.CREDIT,
+                null,
+                request.amount(),
+                Instant.now());
+
+        clientRepository.save(target);
+        financialTransactionRepository.save(transaction);
+
+        return CreditResponse.builder()
+                .clientId(target.getId())
+                .transactionId(transaction.getId())
+                .transactionType(transaction.getTransactionType())
+                .amount(request.amount())
+                .balance(target.getBalance())
+                .build();
     }
 
     private ClientResponse toResponse(Client client) {

@@ -17,7 +17,7 @@ public class AuthController {
 
     private final ClientService clientService;
 
-    @PostMapping("/auth")
+    @PostMapping()
     public ResponseEntity<AuthResponse> authenticate(@Valid @RequestBody AuthRequest authRequest){
         return ResponseEntity.ok(clientService.authenticate(authRequest));
     }

@@ -1,6 +1,10 @@
 package com.irrah.desafio_tecnico.client;
 
+import com.irrah.desafio_tecnico.billing.FinancialTransaction;
+import com.irrah.desafio_tecnico.billing.FinancialTransactionRepository;
+import com.irrah.desafio_tecnico.billing.TransactionType;
 import com.irrah.desafio_tecnico.client.dto.AuthRequest;
+import com.irrah.desafio_tecnico.client.dto.CreditRequest;
 import com.irrah.desafio_tecnico.client.dto.RegisterRequest;
 import com.irrah.desafio_tecnico.client.dto.UpdateRequest;
 import com.irrah.desafio_tecnico.client.exception.ClientNotFoundException;
@@ -12,6 +16,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.NullAndEmptySource;
+import org.junit.jupiter.params.provider.NullSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
@@ -44,9 +49,15 @@ class ClientServiceTest {
 
     private ClientService clientService;
 
+    @Mock
+    private FinancialTransactionRepository financialTransactionRepository;
+
     @BeforeEach
     void setUp() {
-        clientService = new ClientService(clientRepository);
+        clientService = new ClientService(
+                clientRepository,
+                financialTransactionRepository
+        );
     }
 
     @ParameterizedTest
@@ -280,7 +291,7 @@ class ClientServiceTest {
         var responses = clientService.listAll();
 
         assertThat(responses).hasSize(1);
-        var response = responses.get(0);
+        var response = responses.getFirst();
         assertThat(response.id()).isEqualTo(CLIENT_ID);
         assertThat(response.name()).isEqualTo("Cliente Exemplo");
         assertThat(response.documentId()).isEqualTo(CPF);
@@ -322,6 +333,141 @@ class ClientServiceTest {
 
         assertThatThrownBy(() -> clientService.getBalance(CLIENT_ID))
                 .isInstanceOf(ClientNotFoundException.class);
+    }
+
+    @Test
+    void shouldCreditClientAndRegisterFinancialTransaction() {
+        Client client = existingClient();
+        client.credit(new BigDecimal("10.00"));
+
+        when(clientRepository.findById(CLIENT_ID))
+                .thenReturn(Optional.of(client));
+
+        when(financialTransactionRepository.save(
+                any(FinancialTransaction.class)
+        )).thenAnswer(invocation -> {
+            FinancialTransaction transaction = invocation.getArgument(0);
+            ReflectionTestUtils.setField(transaction, "id", 100L);
+            return transaction;
+        });
+
+        var response = clientService.addCredit(
+                CLIENT_ID,
+                new CreditRequest(new BigDecimal("50.00"))
+        );
+
+        assertThat(client.getBalance()).isEqualByComparingTo("60.00");
+        assertThat(response.balance()).isEqualByComparingTo("60.00");
+        assertThat(response.amount()).isEqualByComparingTo("50.00");
+        assertThat(response.clientId()).isEqualTo(CLIENT_ID);
+        assertThat(response.transactionId()).isEqualTo(100L);
+        assertThat(response.transactionType()).isEqualTo(TransactionType.CREDIT);
+
+        var captor = ArgumentCaptor.forClass(FinancialTransaction.class);
+        verify(financialTransactionRepository).save(captor.capture());
+
+        FinancialTransaction transaction = captor.getValue();
+
+        assertThat(transaction.getClient()).isSameAs(client);
+        assertThat(transaction.getTransactionType())
+                .isEqualTo(TransactionType.CREDIT);
+        assertThat(transaction.getAmount()).isEqualByComparingTo("50.00");
+        assertThat(transaction.getMessage()).isNull();
+        assertThat(transaction.getTimestamp()).isNotNull();
+    }
+
+    @Test
+    void shouldRejectCreditForUnknownClient() {
+        when(clientRepository.findById(CLIENT_ID))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> clientService.addCredit(
+                CLIENT_ID,
+                new CreditRequest(new BigDecimal("50.00"))
+        )).isInstanceOf(ClientNotFoundException.class);
+
+        verifyNoInteractions(financialTransactionRepository);
+        verify(clientRepository, never()).save(any(Client.class));
+    }
+
+    @Test
+    void shouldRejectCreditForInactiveClient() {
+        Client client = existingClient();
+        client.deactivate();
+
+        when(clientRepository.findById(CLIENT_ID))
+                .thenReturn(Optional.of(client));
+
+        assertThatThrownBy(() -> clientService.addCredit(
+                CLIENT_ID,
+                new CreditRequest(new BigDecimal("50.00"))
+        )).isInstanceOf(IllegalStateException.class);
+
+        assertThat(client.getBalance()).isEqualByComparingTo("0.00");
+        verifyNoInteractions(financialTransactionRepository);
+        verify(clientRepository, never()).save(any(Client.class));
+    }
+
+    @ParameterizedTest
+    @NullSource
+    @ValueSource(strings = {"0.00", "-1.00", "0.001"})
+    void shouldRejectInvalidCreditAmount(String value) {
+        Client client = existingClient();
+
+        when(clientRepository.findById(CLIENT_ID))
+                .thenReturn(Optional.of(client));
+
+        BigDecimal amount = value == null ? null : new BigDecimal(value);
+
+        assertThatThrownBy(() -> clientService.addCredit(
+                CLIENT_ID,
+                new CreditRequest(amount)
+        )).isInstanceOf(IllegalArgumentException.class);
+
+        assertThat(client.getBalance()).isEqualByComparingTo("0.00");
+        verifyNoInteractions(financialTransactionRepository);
+        verify(clientRepository, never()).save(any(Client.class));
+    }
+
+    @Test
+    void shouldRejectCreditAboveMaximumBalance() {
+        Client client = existingClient();
+        client.credit(new BigDecimal("9999999999.99"));
+
+        when(clientRepository.findById(CLIENT_ID))
+                .thenReturn(Optional.of(client));
+
+        assertThatThrownBy(() -> clientService.addCredit(
+                CLIENT_ID,
+                new CreditRequest(new BigDecimal("0.01"))
+        )).isInstanceOf(IllegalStateException.class);
+
+        assertThat(client.getBalance())
+                .isEqualByComparingTo("9999999999.99");
+
+        verifyNoInteractions(financialTransactionRepository);
+        verify(clientRepository, never()).save(any(Client.class));
+    }
+
+    @Test
+    void shouldPropagateFailureWhenFinancialTransactionCannotBeSaved() {
+        Client client = existingClient();
+
+        when(clientRepository.findById(CLIENT_ID))
+                .thenReturn(Optional.of(client));
+
+        var failure = new DataIntegrityViolationException(
+                "simulated persistence failure"
+        );
+
+        when(financialTransactionRepository.save(
+                any(FinancialTransaction.class)
+        )).thenThrow(failure);
+
+        assertThatThrownBy(() -> clientService.addCredit(
+                CLIENT_ID,
+                new CreditRequest(new BigDecimal("50.00"))
+        )).isSameAs(failure);
     }
 
     private RegisterRequest registration(String document, PlanType plan) {
