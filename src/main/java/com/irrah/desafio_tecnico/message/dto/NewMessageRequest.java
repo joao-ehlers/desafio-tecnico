@@ -17,7 +17,6 @@ public record NewMessageRequest (
        String recipientName,
        String recipientPhone,
        @NotBlank String content,
-       @NotNull Instant timestamp,
        @NotNull PriorityType priorityType,
        @NotNull StatusType statusType,
        @NotNull ChannelType channelType
