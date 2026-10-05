@@ -158,4 +158,29 @@ public class Client {
             );
         }
     }
+
+    public void updateRegistration(
+            String name,
+            String documentId,
+            DocumentType documentType
+    ) {
+        if (name == null || name.isBlank()) {
+            throw new IllegalArgumentException("o nome é obrigatório");
+        }
+
+        if (documentId == null || documentId.isBlank()) {
+            throw new IllegalArgumentException("o documento é obrigatório");
+        }
+
+        if (documentType == null) {
+            throw new IllegalArgumentException(
+                    "o tipo do documento é obrigatório"
+            );
+        }
+
+        this.name = name.strip();
+        this.documentId = documentId.strip();
+        this.documentType = documentType;
+    }
+
 }
