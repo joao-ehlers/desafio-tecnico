@@ -1,8 +1,6 @@
 package com.irrah.desafio_tecnico.message;
 
-import com.irrah.desafio_tecnico.billing.FinancialTransaction;
-import com.irrah.desafio_tecnico.billing.FinancialTransactionRepository;
-import com.irrah.desafio_tecnico.billing.TransactionType;
+import com.irrah.desafio_tecnico.billing.BillingService;
 import com.irrah.desafio_tecnico.client.Client;
 import com.irrah.desafio_tecnico.client.ClientRepository;
 import com.irrah.desafio_tecnico.client.exception.ClientNotFoundException;
@@ -18,6 +16,7 @@ import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import java.time.Clock;
 import java.time.Instant;
 
 @RequiredArgsConstructor
@@ -28,7 +27,8 @@ public class MessageRegistrationService {
     private final ConversationRepository conversationRepository;
     private final RecipientRepository recipientRepository;
     private final ClientRepository clientRepository;
-    private final FinancialTransactionRepository financialTransactionRepository;
+    private final BillingService billingService;
+    private final Clock clock;
 
     @Transactional
     public Long register(NewMessageRequest request){
@@ -42,17 +42,12 @@ public class MessageRegistrationService {
 
         Conversation conversation = resolveConversation(request, client);
 
-        Message message = new Message(conversation, client, request.content(), Instant.now(),
+        Message message = new Message(conversation, client, request.content(), Instant.now(clock),
                 request.priorityType(), request.channelType());
-
-        client.debit(message.getCost());
 
         messageRepository.save(message);
 
-        FinancialTransaction financialTransaction = new FinancialTransaction(client, TransactionType.DEBIT, message,
-                message.getCost(), message.getTimestamp());
-
-        financialTransactionRepository.save(financialTransaction);
+        billingService.chargeMessage(client, message);
 
         return message.getId();
     }

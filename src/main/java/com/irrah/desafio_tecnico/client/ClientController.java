@@ -42,8 +42,13 @@ public class ClientController {
         return ResponseEntity.ok(clientService.updateClient(id, request));
     }
 
-    @PostMapping("{id}/credits")
+    @PostMapping("/{id}/credits")
     public ResponseEntity<CreditResponse> addCredit(@PathVariable Long id, @Valid @RequestBody CreditRequest request){
         return ResponseEntity.status(201).body(clientService.addCredit(id, request));
+    }
+
+    @PutMapping("/{id}/credit-limit")
+    public ResponseEntity<LimitResponse> newLimit(@PathVariable Long id, @Valid @RequestBody LimitRequest request){
+        return ResponseEntity.ok(clientService.newLimit(id, request));
     }
 }

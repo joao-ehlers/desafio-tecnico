@@ -9,6 +9,7 @@ import lombok.*;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDate;
 
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @Getter
@@ -57,6 +58,19 @@ public class Client {
     )
     @Column(name="credit_limit", nullable = false, precision = 12, scale = 2)
     private BigDecimal creditLimit = BigDecimal.ZERO;
+
+    @NotNull
+    @PositiveOrZero(message = "o consumo mensal não pode ser negativo")
+    @Digits(
+            integer = 10,
+            fraction = 2,
+            message = "o consumo mensal deve ter ate 10 digitos inteiros e 2 decimais"
+    )
+    @Column(name = "monthly_consumption", nullable = false, precision = 12, scale = 2)
+    private BigDecimal monthlyConsumption = BigDecimal.ZERO;
+
+    @Column(name = "consumption_month")
+    private LocalDate consumptionMonth;
 
     @Column(nullable = false)
     private boolean active = true;
@@ -143,6 +157,69 @@ public class Client {
         }
 
         this.balance = this.balance.subtract(amount).setScale(2, RoundingMode.UNNECESSARY);
+    }
+
+    public void adjustCreditLimit(BigDecimal newLimit){
+        if (newLimit == null || newLimit.signum() < 0) {
+            throw new IllegalArgumentException(
+                    "o limite não pode ser negativo"
+            );
+        }
+
+        if (newLimit.stripTrailingZeros().scale() > 2) {
+            throw new IllegalArgumentException(
+                    "o limite deve possuir no máximo 2 casas decimais"
+            );
+        }
+
+        if(!this.active){
+            throw new IllegalStateException("cliente inativado nao pode ter o limite ajustado");
+        }
+
+        if(this.planType != PlanType.POSTPAID){
+            throw new IllegalStateException("para operacao de ajuste de crédito, a conta deve possuir o plano pós-pago");
+        }
+
+        if(newLimit.compareTo(MAX_BALANCE) > 0){
+            throw new IllegalStateException("o valor excede o maximo de credito permitido");
+        }
+
+        this.creditLimit = newLimit.setScale(2, RoundingMode.UNNECESSARY);
+    }
+
+    public void consumeCredit(BigDecimal amount, LocalDate referenceMonth){
+        validateAmount(amount);
+
+        if(referenceMonth == null){
+            throw new IllegalArgumentException("O mês de referência não pode ser nulo");
+        }
+
+        LocalDate month = referenceMonth.withDayOfMonth(1);
+
+        if(this.consumptionMonth != null && month.isBefore(this.consumptionMonth)){
+            throw new IllegalArgumentException("O mês de referência não pode ser anterior ao mês de consumo atual");
+        }
+
+        if(!this.active){
+            throw new IllegalStateException("cliente inativado nao pode realizar operacao de consumo");
+        }
+
+        if(this.planType != PlanType.POSTPAID){
+            throw new IllegalStateException("a operacao de consumo exige plano pós-pago");
+        }
+
+        BigDecimal actualConsumption = this.consumptionMonth == null || month.isAfter(this.consumptionMonth) ?
+                BigDecimal.ZERO : this.monthlyConsumption;
+
+
+        actualConsumption = actualConsumption.add(amount);
+
+        if(actualConsumption.compareTo(creditLimit) > 0){
+            throw new IllegalStateException("o limite disponível é insuficiente");
+        }
+
+        this.monthlyConsumption = actualConsumption.setScale(2, RoundingMode.UNNECESSARY);
+        this.consumptionMonth = month;
     }
 
     private void validateAmount(BigDecimal amount){
