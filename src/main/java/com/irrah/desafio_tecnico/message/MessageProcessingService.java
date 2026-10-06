@@ -1,8 +1,7 @@
 package com.irrah.desafio_tecnico.message;
 
 import com.irrah.desafio_tecnico.queue.InMemoryMessageQueue;
-import com.irrah.desafio_tecnico.message.exception.MessageNotFoundException;
-import jakarta.transaction.Transactional;
+import com.irrah.desafio_tecnico.queue.QueueMetrics;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -12,12 +11,19 @@ public class MessageProcessingService {
 
     private final InMemoryMessageQueue inMemoryMessageQueue;
     private final SingleMessageProcessingService singleMessageProcessingService;
+    private final QueueMetrics queueMetrics;
 
-    public void processPendingMessages(){
+    public synchronized void processPendingMessages(){
         Long messageId;
 
         while((messageId = inMemoryMessageQueue.dequeue()) != null){
-            singleMessageProcessingService.process(messageId);
+            StatusType statusType = singleMessageProcessingService.process(messageId);
+
+            if(statusType == StatusType.SENT){
+                queueMetrics.registerSuccess();
+            }else if(statusType == StatusType.FAILED){
+                queueMetrics.registerFailure();
+            }
         }
     }
 }

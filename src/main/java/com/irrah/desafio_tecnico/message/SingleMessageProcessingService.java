@@ -13,7 +13,7 @@ public class SingleMessageProcessingService {
     private final MessageSender messageSender;
 
     @Transactional
-    public void process(Long messageId){
+    public StatusType process(Long messageId){
 
         Message message = messageRepository.findById(messageId).orElseThrow(MessageNotFoundException::new);
 
@@ -23,9 +23,10 @@ public class SingleMessageProcessingService {
             messageSender.sendMessage(message);
         }catch (MessageDeliveryException e){
             message.markAsFailed();
-            return;
+            return message.getStatus();
         }
 
         message.markAsSent();
+        return message.getStatus();
     }
 }
