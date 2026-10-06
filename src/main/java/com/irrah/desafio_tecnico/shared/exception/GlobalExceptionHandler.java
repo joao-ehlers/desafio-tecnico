@@ -3,6 +3,8 @@ package com.irrah.desafio_tecnico.shared.exception;
 import com.irrah.desafio_tecnico.client.exception.ClientNotFoundException;
 import com.irrah.desafio_tecnico.client.exception.DuplicateDocumentException;
 import com.irrah.desafio_tecnico.client.exception.InactiveClientException;
+import com.irrah.desafio_tecnico.conversation.exception.ConversationNotFoundException;
+import com.irrah.desafio_tecnico.conversation.exception.RecipientNotFoundException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
@@ -94,6 +96,28 @@ public class GlobalExceptionHandler {
                 HttpStatus.CONFLICT,
                 "Documento já cadastrado",
                 exception.getMessage()
+        );
+    }
+
+    @ExceptionHandler(ConversationNotFoundException.class)
+    public ProblemDetail handleConversationNotFound(
+            ConversationNotFoundException exception
+    ) {
+        return problem(
+                HttpStatus.NOT_FOUND,
+                "Conversa não encontrada",
+                "A conversa não existe ou não pertence ao cliente informado."
+        );
+    }
+
+    @ExceptionHandler(RecipientNotFoundException.class)
+    public ProblemDetail handleRecipientNotFound(
+            RecipientNotFoundException exception
+    ) {
+        return problem(
+                HttpStatus.NOT_FOUND,
+                "Destinatário não encontrado",
+                "Não existe destinatário para o identificador informado."
         );
     }
 

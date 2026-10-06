@@ -12,7 +12,10 @@ import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import java.math.BigDecimal;
+import java.time.Clock;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 
 @RequiredArgsConstructor
@@ -21,6 +24,7 @@ public class ClientService {
 
     private final ClientRepository clientRepository;
     private final FinancialTransactionRepository financialTransactionRepository;
+    private final Clock clock;
 
     public AuthResponse authenticate(AuthRequest request) {
         String document = DocumentValidator.normalizeAndValidate(
@@ -55,7 +59,40 @@ public class ClientService {
     public BalanceResponse getBalance(Long clientId) {
         Client client = clientRepository.findById(clientId).orElseThrow(ClientNotFoundException::new);
 
-        return BalanceResponse.builder().balance(client.getBalance()).build();
+        return switch(client.getPlanType()){
+            case PREPAID -> BalanceResponse.builder().balance(client.getBalance()).build();
+
+            case POSTPAID -> {
+                LocalDate referenceMonth = LocalDate.now(clock)
+                        .withDayOfMonth(1);
+
+                LocalDate consumptionMonth = client.getConsumptionMonth();
+
+                if (consumptionMonth != null
+                        && consumptionMonth.isAfter(referenceMonth)) {
+                    throw new IllegalStateException(
+                            "o mês de consumo registrado está no futuro"
+                    );
+                }
+
+                BigDecimal consumption =
+                        consumptionMonth == null
+                                || consumptionMonth.isBefore(referenceMonth)
+                                ? BigDecimal.ZERO
+                                : client.getMonthlyConsumption();
+
+                BigDecimal available = client.getCreditLimit()
+                        .subtract(consumption)
+                        .max(BigDecimal.ZERO);
+
+                yield BalanceResponse.builder()
+                        .creditLimit(client.getCreditLimit())
+                        .monthlyConsumption(consumption)
+                        .available(available)
+                        .build();
+            }
+        };
+
     }
 
     @Transactional
@@ -68,12 +105,6 @@ public class ClientService {
 
         if (clientRepository.existsByDocumentId(document)) {
             throw new DuplicateDocumentException();
-        }
-
-        if (request.planType() != PlanType.PREPAID) {
-            throw new IllegalArgumentException(
-                    "somente o plano pré-pago está disponível nesta entrega"
-            );
         }
 
         Client client = new Client(
@@ -122,7 +153,7 @@ public class ClientService {
                 TransactionType.CREDIT,
                 null,
                 request.amount(),
-                Instant.now());
+                Instant.now(clock));
 
         clientRepository.save(target);
         financialTransactionRepository.save(transaction);
@@ -147,5 +178,16 @@ public class ClientService {
                 .limit(client.getCreditLimit())
                 .active(client.isActive())
                 .build();
+    }
+
+    @Transactional
+    public LimitResponse newLimit(Long id, LimitRequest request){
+        Client target = clientRepository.findById(id).orElseThrow(ClientNotFoundException::new);
+
+        target.adjustCreditLimit(request.newLimit());
+
+        clientRepository.save(target);
+
+        return LimitResponse.builder().creditLimit(target.getCreditLimit()).clientId(target.getId()).build();
     }
 }

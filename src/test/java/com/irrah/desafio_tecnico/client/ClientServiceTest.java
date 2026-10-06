@@ -3,10 +3,7 @@ package com.irrah.desafio_tecnico.client;
 import com.irrah.desafio_tecnico.billing.FinancialTransaction;
 import com.irrah.desafio_tecnico.billing.FinancialTransactionRepository;
 import com.irrah.desafio_tecnico.billing.TransactionType;
-import com.irrah.desafio_tecnico.client.dto.AuthRequest;
-import com.irrah.desafio_tecnico.client.dto.CreditRequest;
-import com.irrah.desafio_tecnico.client.dto.RegisterRequest;
-import com.irrah.desafio_tecnico.client.dto.UpdateRequest;
+import com.irrah.desafio_tecnico.client.dto.*;
 import com.irrah.desafio_tecnico.client.exception.ClientNotFoundException;
 import com.irrah.desafio_tecnico.client.exception.DuplicateDocumentException;
 import com.irrah.desafio_tecnico.client.exception.InactiveClientException;
@@ -25,16 +22,17 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoInteractions;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
 
 
 @ExtendWith(MockitoExtension.class)
@@ -52,11 +50,17 @@ class ClientServiceTest {
     @Mock
     private FinancialTransactionRepository financialTransactionRepository;
 
+    private final Clock clock = Clock.fixed(
+            Instant.parse("2026-11-15T12:00:00Z"),
+            ZoneId.of("America/Sao_Paulo")
+    );
+
     @BeforeEach
     void setUp() {
         clientService = new ClientService(
                 clientRepository,
-                financialTransactionRepository
+                financialTransactionRepository,
+                clock
         );
     }
 
@@ -131,18 +135,6 @@ class ClientServiceTest {
                 .isInstanceOf(IllegalArgumentException.class);
 
         verifyNoInteractions(clientRepository);
-    }
-
-    @Test
-    void shouldRejectPostpaidRegistrationWithoutSaving() {
-        var request = registration(CPF, PlanType.POSTPAID);
-        when(clientRepository.existsByDocumentId(CPF)).thenReturn(false);
-
-        assertThatThrownBy(() -> clientService.registerClient(request))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("pré-pago");
-
-        verify(clientRepository, never()).save(any(Client.class));
     }
 
     @Test
@@ -468,6 +460,106 @@ class ClientServiceTest {
                 CLIENT_ID,
                 new CreditRequest(new BigDecimal("50.00"))
         )).isSameAs(failure);
+    }
+
+    @Test
+    void shouldReturnFullLimitBeforeFirstPostpaidConsumption() {
+        Client client = postpaidClient("100.00");
+        when(clientRepository.findById(1L)).thenReturn(Optional.of(client));
+
+        var response = clientService.getBalance(1L);
+
+        assertThat(response.creditLimit()).isEqualByComparingTo("100");
+        assertThat(response.monthlyConsumption()).isEqualByComparingTo("0");
+        assertThat(response.available()).isEqualByComparingTo("100");
+    }
+
+    @Test
+    void shouldReturnCurrentMonthConsumptionAndAvailableLimit() {
+        Client client = postpaidClient("100.00");
+        client.consumeCredit(
+                new BigDecimal("40.00"),
+                LocalDate.of(2026, 11, 1)
+        );
+
+        when(clientRepository.findById(1L)).thenReturn(Optional.of(client));
+
+        var response = clientService.getBalance(1L);
+
+        assertThat(response.monthlyConsumption()).isEqualByComparingTo("40");
+        assertThat(response.available()).isEqualByComparingTo("60");
+    }
+
+    @Test
+    void shouldIgnorePreviousMonthConsumptionWithoutMutatingClient() {
+        Client client = postpaidClient("100.00");
+        LocalDate october = LocalDate.of(2026, 10, 1);
+        client.consumeCredit(new BigDecimal("40.00"), october);
+
+        when(clientRepository.findById(1L)).thenReturn(Optional.of(client));
+
+        var response = clientService.getBalance(1L);
+
+        assertThat(response.monthlyConsumption()).isEqualByComparingTo("0");
+        assertThat(response.available()).isEqualByComparingTo("100");
+
+        assertThat(client.getMonthlyConsumption()).isEqualByComparingTo("40");
+        assertThat(client.getConsumptionMonth()).isEqualTo(october);
+        verify(clientRepository, never()).save(any(Client.class));
+    }
+
+    @Test
+    void shouldReturnZeroAvailableWhenLimitIsBelowConsumption() {
+        Client client = postpaidClient("100.00");
+        client.consumeCredit(
+                new BigDecimal("40.00"),
+                LocalDate.of(2026, 11, 1)
+        );
+        client.adjustCreditLimit(new BigDecimal("20.00"));
+
+        when(clientRepository.findById(1L)).thenReturn(Optional.of(client));
+
+        var response = clientService.getBalance(1L);
+
+        assertThat(response.monthlyConsumption()).isEqualByComparingTo("40");
+        assertThat(response.available()).isEqualByComparingTo("0");
+    }
+
+    @Test
+    void shouldRejectBalanceQueryWhenStoredConsumptionMonthIsInTheFuture() {
+        Client client = postpaidClient("100.00");
+        client.consumeCredit(
+                new BigDecimal("1.00"),
+                LocalDate.of(2026, 12, 1)
+        );
+
+        when(clientRepository.findById(1L)).thenReturn(Optional.of(client));
+
+        assertThatThrownBy(() -> clientService.getBalance(1L))
+                .isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    void shouldUpdateLimitWithoutRegisteringFinancialTransaction() {
+        Client client = postpaidClient("100.00");
+        when(clientRepository.findById(1L)).thenReturn(Optional.of(client));
+
+        LimitRequest request = mock(LimitRequest.class);
+        when(request.newLimit()).thenReturn(new BigDecimal("200.00"));
+
+        clientService.newLimit(1L, request);
+
+        assertThat(client.getCreditLimit()).isEqualByComparingTo("200");
+        verifyNoInteractions(financialTransactionRepository);
+    }
+
+    private Client postpaidClient(String limit) {
+        Client client = new Client(
+                "Empresa", "52998224725",
+                DocumentType.CPF, PlanType.POSTPAID
+        );
+        client.adjustCreditLimit(new BigDecimal(limit));
+        return client;
     }
 
     private RegisterRequest registration(String document, PlanType plan) {
