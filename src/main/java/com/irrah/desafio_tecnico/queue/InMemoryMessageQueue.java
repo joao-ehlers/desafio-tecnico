@@ -5,13 +5,16 @@ import com.irrah.desafio_tecnico.shared.exception.InvalidInputException;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayDeque;
+import java.util.HashSet;
 import java.util.Queue;
+import java.util.Set;
 
 @Component
 public class InMemoryMessageQueue {
 
     private final Queue<Long> normalQueue = new ArrayDeque<>();
     private final Queue<Long> urgentQueue = new ArrayDeque<>();
+    private final Set<Long> queuedIds = new HashSet<>();
 
     private int consecutiveUrgent = 0;
     private final int MAX_CONSECUTIVE_URGENT = 3;
@@ -24,6 +27,10 @@ public class InMemoryMessageQueue {
             throw new InvalidInputException("A prioridade da mensagem é obrigatoria");
         }
 
+        if(!queuedIds.add(messageId)){
+            return;
+        }
+
         switch (priorityType){
             case URGENT -> urgentQueue.offer(messageId);
             case NORMAL -> normalQueue.offer(messageId);
@@ -31,6 +38,8 @@ public class InMemoryMessageQueue {
     }
 
     public synchronized Long dequeue(){
+        Long messageId;
+
         if(urgentQueue.isEmpty() && normalQueue.isEmpty()){
             consecutiveUrgent = 0;
             return null;
@@ -41,12 +50,14 @@ public class InMemoryMessageQueue {
                     consecutiveUrgent + 1,
                     MAX_CONSECUTIVE_URGENT
             );
-
-            return urgentQueue.poll();
+            messageId = urgentQueue.poll();
+            queuedIds.remove(messageId);
+            return messageId;
         }
 
         this.consecutiveUrgent = 0;
-        return normalQueue.poll();
+        messageId = normalQueue.poll();
+        return messageId;
     }
 
     public synchronized int size(){
