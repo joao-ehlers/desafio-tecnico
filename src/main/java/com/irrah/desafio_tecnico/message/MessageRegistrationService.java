@@ -12,6 +12,7 @@ import com.irrah.desafio_tecnico.conversation.RecipientRepository;
 import com.irrah.desafio_tecnico.conversation.exception.ConversationNotFoundException;
 import com.irrah.desafio_tecnico.conversation.exception.RecipientNotFoundException;
 import com.irrah.desafio_tecnico.message.dto.NewMessageRequest;
+import com.irrah.desafio_tecnico.shared.exception.InvalidInputException;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -58,7 +59,7 @@ public class MessageRegistrationService {
                     client.getId()).orElseThrow(ConversationNotFoundException::new);
 
             if(request.recipientId() != null && !request.recipientId().equals(conversation.getRecipient().getId())){
-                throw new IllegalArgumentException("O destinatario nao pertence a essa conversa");
+                throw new InvalidInputException("O destinatario nao pertence a essa conversa");
             }
 
             return conversation;

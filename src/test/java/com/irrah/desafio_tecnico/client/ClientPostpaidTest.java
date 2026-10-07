@@ -1,5 +1,10 @@
 package com.irrah.desafio_tecnico.client;
 
+import com.irrah.desafio_tecnico.billing.exception.ExceedingValueException;
+import com.irrah.desafio_tecnico.billing.exception.InsufficientFundsException;
+import com.irrah.desafio_tecnico.client.exception.ClientNotActiveException;
+import com.irrah.desafio_tecnico.client.exception.InvalidPlanOperationException;
+import com.irrah.desafio_tecnico.shared.exception.InvalidInputException;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
@@ -57,7 +62,7 @@ class ClientPostpaidTest {
 
         assertThatThrownBy(() ->
                 client.consumeCredit(new BigDecimal("0.50"), OCTOBER)
-        ).isInstanceOf(IllegalStateException.class);
+        ).isInstanceOf(InsufficientFundsException.class);
 
         assertThat(client.getMonthlyConsumption())
                 .isEqualByComparingTo("0.75");
@@ -90,7 +95,7 @@ class ClientPostpaidTest {
                         new BigDecimal("11.00"),
                         OCTOBER.plusMonths(1)
                 )
-        ).isInstanceOf(IllegalStateException.class);
+        ).isInstanceOf(InsufficientFundsException.class);
 
         assertThat(client.getMonthlyConsumption())
                 .isEqualByComparingTo("9.00");
@@ -107,7 +112,7 @@ class ClientPostpaidTest {
                         new BigDecimal("0.25"),
                         OCTOBER.minusMonths(1)
                 )
-        ).isInstanceOf(IllegalArgumentException.class);
+        ).isInstanceOf(InvalidInputException.class);
 
         assertThat(client.getMonthlyConsumption())
                 .isEqualByComparingTo("1.00");
@@ -119,17 +124,17 @@ class ClientPostpaidTest {
         Client client = postpaidClient("10.00");
 
         assertThatThrownBy(() -> client.consumeCredit(null, OCTOBER))
-                .isInstanceOf(IllegalArgumentException.class);
+                .isInstanceOf(InvalidInputException.class);
 
         for (String value : new String[]{"0", "-1", "0.001"}) {
             assertThatThrownBy(() ->
                     client.consumeCredit(new BigDecimal(value), OCTOBER)
-            ).isInstanceOf(IllegalArgumentException.class);
+            ).isInstanceOf(InvalidInputException.class);
         }
 
         assertThatThrownBy(() ->
                 client.consumeCredit(new BigDecimal("0.25"), null)
-        ).isInstanceOf(IllegalArgumentException.class);
+        ).isInstanceOf(InvalidInputException.class);
 
         assertThat(client.getMonthlyConsumption()).isEqualByComparingTo("0");
         assertThat(client.getConsumptionMonth()).isNull();
@@ -142,7 +147,7 @@ class ClientPostpaidTest {
 
         assertThatThrownBy(() ->
                 client.consumeCredit(new BigDecimal("0.25"), OCTOBER)
-        ).isInstanceOf(IllegalStateException.class);
+        ).isInstanceOf(ClientNotActiveException.class);
 
         assertThat(client.getMonthlyConsumption()).isEqualByComparingTo("0");
     }
@@ -156,11 +161,11 @@ class ClientPostpaidTest {
 
         assertThatThrownBy(() ->
                 client.consumeCredit(new BigDecimal("0.25"), OCTOBER)
-        ).isInstanceOf(IllegalStateException.class);
+        ).isInstanceOf(InvalidPlanOperationException.class);
 
         assertThatThrownBy(() ->
                 client.adjustCreditLimit(new BigDecimal("10.00"))
-        ).isInstanceOf(IllegalStateException.class);
+        ).isInstanceOf(InvalidPlanOperationException.class);
     }
 
     @Test
@@ -175,7 +180,7 @@ class ClientPostpaidTest {
 
         assertThatThrownBy(() ->
                 client.consumeCredit(new BigDecimal("0.25"), OCTOBER)
-        ).isInstanceOf(IllegalStateException.class);
+        ).isInstanceOf(InsufficientFundsException.class);
     }
 
     @Test
@@ -183,17 +188,17 @@ class ClientPostpaidTest {
         Client client = postpaidClient("10.00");
 
         assertThatThrownBy(() -> client.adjustCreditLimit(null))
-                .isInstanceOf(IllegalArgumentException.class);
+                .isInstanceOf(InvalidInputException.class);
 
         for (String value : new String[]{"-1", "0.001"}) {
             assertThatThrownBy(() ->
                     client.adjustCreditLimit(new BigDecimal(value))
-            ).isInstanceOf(IllegalArgumentException.class);
+            ).isInstanceOf(InvalidInputException.class);
         }
 
         assertThatThrownBy(() ->
                 client.adjustCreditLimit(new BigDecimal("10000000000.00"))
-        ).isInstanceOf(IllegalStateException.class);
+        ).isInstanceOf(ExceedingValueException.class);
 
         assertThat(client.getCreditLimit()).isEqualByComparingTo("10");
     }
@@ -205,7 +210,7 @@ class ClientPostpaidTest {
 
         assertThatThrownBy(() ->
                 client.adjustCreditLimit(new BigDecimal("20.00"))
-        ).isInstanceOf(IllegalStateException.class);
+        ).isInstanceOf(ClientNotActiveException.class);
 
         assertThat(client.getCreditLimit()).isEqualByComparingTo("10");
     }

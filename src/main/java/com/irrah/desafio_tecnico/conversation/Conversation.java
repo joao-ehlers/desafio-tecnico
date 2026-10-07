@@ -1,6 +1,7 @@
 package com.irrah.desafio_tecnico.conversation;
 
 import com.irrah.desafio_tecnico.client.Client;
+import com.irrah.desafio_tecnico.shared.exception.InvalidInputException;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotNull;
 import lombok.*;
@@ -31,11 +32,11 @@ public class Conversation {
     public Conversation(Client client, Recipient recipient) {
 
         if (client == null) {
-            throw new IllegalArgumentException("o cliente é obrigatório");
+            throw new InvalidInputException("o cliente é obrigatório");
         }
 
         if (recipient == null) {
-            throw new IllegalArgumentException("o destinatário é obrigatório");
+            throw new InvalidInputException("o destinatário é obrigatório");
         }
 
         this.client = client;

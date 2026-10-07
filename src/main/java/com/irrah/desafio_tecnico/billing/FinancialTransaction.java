@@ -2,6 +2,7 @@ package com.irrah.desafio_tecnico.billing;
 
 import com.irrah.desafio_tecnico.client.Client;
 import com.irrah.desafio_tecnico.message.Message;
+import com.irrah.desafio_tecnico.shared.exception.InvalidInputException;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.NotNull;
@@ -59,33 +60,33 @@ public class FinancialTransaction {
         validateAmount(amount);
 
         if (client == null) {
-            throw new IllegalArgumentException("o cliente é obrigatório");
+            throw new InvalidInputException("o cliente é obrigatório");
         }
 
         if (transactionType == null) {
-            throw new IllegalArgumentException("o tipo da transação é obrigatório");
+            throw new InvalidInputException("o tipo da transação é obrigatório");
         }
 
         if (timestamp == null) {
-            throw new IllegalArgumentException("o horario da transação é obrigatório");
+            throw new InvalidInputException("o horario da transação é obrigatório");
         }
 
         if (transactionType == TransactionType.DEBIT) {
             if (message == null) {
-                throw new IllegalArgumentException(
+                throw new InvalidInputException(
                         "o débito por envio deve estar associado a uma mensagem"
                 );
             }
 
             if (amount.compareTo(message.getCost()) != 0) {
-                throw new IllegalArgumentException(
+                throw new InvalidInputException(
                         "o valor do débito deve ser igual ao custo da mensagem"
                 );
             }
         }
 
         if (transactionType == TransactionType.CREDIT && message != null) {
-            throw new IllegalArgumentException(
+            throw new InvalidInputException(
                     "o crédito por recarga não deve estar associado a uma mensagem"
             );
         }
@@ -99,19 +100,19 @@ public class FinancialTransaction {
 
     private void validateAmount(BigDecimal amount){
         if(amount == null || amount.signum() <= 0){
-            throw new IllegalArgumentException(
+            throw new InvalidInputException(
                     "o valor deve ser maior que zero"
             );
         }
 
         if(amount.stripTrailingZeros().scale() > 2){
-            throw new IllegalArgumentException(
+            throw new InvalidInputException(
                     "o valor deve possuir no maximo 2 casas decimais"
             );
         }
 
         if(amount.compareTo(MAX_AMOUNT) > 0){
-            throw new IllegalArgumentException("o valor excede o maximo permitido");
+            throw new InvalidInputException("o valor excede o maximo permitido");
         }
     }
 }

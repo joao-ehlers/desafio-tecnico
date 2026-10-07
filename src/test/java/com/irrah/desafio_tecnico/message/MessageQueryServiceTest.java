@@ -5,6 +5,7 @@ import com.irrah.desafio_tecnico.client.exception.ClientNotFoundException;
 import com.irrah.desafio_tecnico.conversation.*;
 import com.irrah.desafio_tecnico.conversation.exception.ConversationNotFoundException;
 import com.irrah.desafio_tecnico.message.exception.MessageNotFoundException;
+import com.irrah.desafio_tecnico.shared.exception.InvalidInputException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -188,9 +189,9 @@ class MessageQueryServiceTest {
     @CsvSource({"-1,20", "0,0", "0,-1", "0,101"})
     void shouldRejectInvalidPaginationForListAndHistory(int page, int size) {
         assertThatThrownBy(() -> service.listMessages(CLIENT_ID, null, null, null, null, page, size))
-                .isInstanceOf(IllegalArgumentException.class);
+                .isInstanceOf(InvalidInputException.class);
         assertThatThrownBy(() -> service.getHistory(CLIENT_ID, CONVERSATION_ID, page, size))
-                .isInstanceOf(IllegalArgumentException.class);
+                .isInstanceOf(InvalidInputException.class);
         verifyNoInteractions(clientRepository, conversationRepository, messageRepository);
     }
 

@@ -1,9 +1,11 @@
 package com.irrah.desafio_tecnico.message;
 
 import com.irrah.desafio_tecnico.billing.FinancialTransactionRepository;
+import com.irrah.desafio_tecnico.billing.exception.InsufficientFundsException;
 import com.irrah.desafio_tecnico.client.*;
 import com.irrah.desafio_tecnico.conversation.*;
 import com.irrah.desafio_tecnico.message.dto.NewMessageRequest;
+import com.irrah.desafio_tecnico.message.exception.InvalidMessageStateException;
 import com.irrah.desafio_tecnico.message.exception.MessageDeliveryException;
 import com.irrah.desafio_tecnico.queue.*;
 import org.junit.jupiter.api.BeforeEach;
@@ -50,7 +52,6 @@ class AsyncBillingIntegrationTest {
         registry.add("spring.flyway.password", POSTGRES::getPassword);
     }
 
-    // Replace only automatic execution: real processing services are invoked below.
     @MockitoBean MessageQueueWorker scheduledWorker;
     @MockitoBean MessageSender sender;
     @MockitoBean Clock clock;
@@ -183,7 +184,7 @@ class AsyncBillingIntegrationTest {
         Client client = clients.saveAndFlush(new Client(
                 "Empresa", "52998224725", DocumentType.CPF, plan));
         assertThatThrownBy(() -> messageService.newMessage(client.getId(), request()))
-                .isInstanceOf(IllegalStateException.class);
+                .isInstanceOf(InsufficientFundsException.class);
         assertThat(messages.count()).isZero();
         assertThat(transactions.count()).isZero();
         assertThat(conversations.count()).isZero();

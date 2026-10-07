@@ -1,5 +1,6 @@
 package com.irrah.desafio_tecnico.conversation;
 
+import com.irrah.desafio_tecnico.shared.exception.InvalidInputException;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotBlank;
 import lombok.*;
@@ -25,11 +26,11 @@ public class Recipient {
 
     public Recipient(String name, String phone) {
         if (name == null || name.isBlank()) {
-            throw new IllegalArgumentException("o nome é obrigatório");
+            throw new InvalidInputException("o nome é obrigatório");
         }
 
         if (phone == null || phone.isBlank()) {
-            throw new IllegalArgumentException("o telefone é obrigatório");
+            throw new InvalidInputException("o telefone é obrigatório");
         }
 
         this.name = name.strip();

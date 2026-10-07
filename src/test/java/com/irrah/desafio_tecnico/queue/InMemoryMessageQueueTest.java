@@ -1,6 +1,7 @@
 package com.irrah.desafio_tecnico.queue;
 
 import com.irrah.desafio_tecnico.message.PriorityType;
+import com.irrah.desafio_tecnico.shared.exception.InvalidInputException;
 import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.*;
 
@@ -14,9 +15,9 @@ class InMemoryMessageQueueTest {
 
     @Test void shouldRejectInvalidInputWithoutChangingQueue() {
         assertThatThrownBy(() -> queue.enqueue(null, PriorityType.NORMAL))
-                .isInstanceOf(IllegalArgumentException.class);
+                .isInstanceOf(InvalidInputException.class);
         assertThatThrownBy(() -> queue.enqueue(1L, null))
-                .isInstanceOf(IllegalArgumentException.class);
+                .isInstanceOf(InvalidInputException.class);
         assertThat(queue.size()).isZero();
     }
 

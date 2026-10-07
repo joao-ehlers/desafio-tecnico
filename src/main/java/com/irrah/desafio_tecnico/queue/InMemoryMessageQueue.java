@@ -1,7 +1,7 @@
 package com.irrah.desafio_tecnico.queue;
 
 import com.irrah.desafio_tecnico.message.PriorityType;
-import com.irrah.desafio_tecnico.message.StatusType;
+import com.irrah.desafio_tecnico.shared.exception.InvalidInputException;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayDeque;
@@ -18,10 +18,10 @@ public class InMemoryMessageQueue {
 
     public synchronized void enqueue(Long messageId, PriorityType priorityType){
         if(messageId == null){
-            throw new IllegalArgumentException("O ID da mensagem é obrigatorio");
+            throw new InvalidInputException("O ID da mensagem é obrigatorio");
         }
         if(priorityType == null){
-            throw new IllegalArgumentException("A prioridade da mensagem é obrigatoria");
+            throw new InvalidInputException("A prioridade da mensagem é obrigatoria");
         }
 
         switch (priorityType){
