@@ -1,7 +1,6 @@
 package com.irrah.desafio_tecnico.message;
 
 import com.irrah.desafio_tecnico.message.dto.NewMessageRequest;
-import com.irrah.desafio_tecnico.message.exception.MessageNotFoundException;
 import com.irrah.desafio_tecnico.queue.InMemoryMessageQueue;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -13,20 +12,14 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataAccessResourceFailureException;
 
-import java.util.Optional;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.Mockito.doThrow;
-import static org.mockito.Mockito.inOrder;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoInteractions;
-import static org.mockito.Mockito.when;
-
+import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class MessageServiceTest {
 
+    private static final Long CLIENT_ID = 7L;
     private static final Long MESSAGE_ID = 42L;
 
     @Mock
@@ -36,16 +29,13 @@ class MessageServiceTest {
     private MessageRegistrationService messageRegistrationService;
 
     @Mock
-    private MessageProcessingService messageProcessingService;
-
-    @Mock
     private MessageRepository messageRepository;
 
     @Mock
     private NewMessageRequest request;
 
     @Mock
-    private Message persistedMessage;
+    private Message registeredMessage;
 
     private MessageService messageService;
 
@@ -54,103 +44,109 @@ class MessageServiceTest {
         messageService = new MessageService(
                 inMemoryMessageQueue,
                 messageRegistrationService,
-                messageProcessingService,
                 messageRepository
         );
     }
 
     @ParameterizedTest
-    @EnumSource(value = StatusType.class, names = {"SENT", "FAILED"})
-    void shouldReturnStatusOfRegisteredMessageAfterProcessing(StatusType finalStatus) {
-        when(messageRegistrationService.register(request)).thenReturn(MESSAGE_ID);
-        when(messageRepository.findById(MESSAGE_ID))
-                .thenReturn(Optional.of(persistedMessage));
-        when(persistedMessage.getId()).thenReturn(MESSAGE_ID);
-        when(persistedMessage.getStatus()).thenReturn(finalStatus);
+    @EnumSource(
+            value = PriorityType.class,
+            names = {"NORMAL", "URGENT"}
+    )
+    void shouldRegisterAndEnqueueMessageWithItsPriority(
+            PriorityType priority
+    ) {
+        stubRegistration(priority);
 
-        var response = messageService.newMessage(request);
+        var response = messageService.newMessage(CLIENT_ID, request);
 
         assertThat(response.messageId()).isEqualTo(MESSAGE_ID);
-        assertThat(response.statusType()).isEqualTo(finalStatus);
-
+        assertThat(response.statusType()).isEqualTo(StatusType.QUEUED);
 
         InOrder order = inOrder(
                 messageRegistrationService,
-                inMemoryMessageQueue,
-                messageProcessingService,
-                messageRepository
+                inMemoryMessageQueue
         );
-        order.verify(messageRegistrationService).register(request);
-        order.verify(inMemoryMessageQueue).enqueue(MESSAGE_ID);
-        order.verify(messageProcessingService).processPendingMessages();
-        order.verify(messageRepository).findById(MESSAGE_ID);
+
+        order.verify(messageRegistrationService)
+                .register(CLIENT_ID, request);
+
+        order.verify(inMemoryMessageQueue)
+                .enqueue(MESSAGE_ID, priority);
+
+        order.verifyNoMoreInteractions();
+
+        verifyNoInteractions(messageRepository);
+
+        verifyNoInteractions(request);
     }
 
     @Test
     void shouldStopBeforeEnqueueWhenRegistrationFails() {
-        var failure = new IllegalArgumentException("invalid message request");
-        when(messageRegistrationService.register(request)).thenThrow(failure);
+        var failure =
+                new IllegalArgumentException("invalid message request");
 
-        assertThatThrownBy(() -> messageService.newMessage(request))
-                .isSameAs(failure);
+        when(messageRegistrationService.register(CLIENT_ID, request))
+                .thenThrow(failure);
+
+        assertThatThrownBy(() ->
+                messageService.newMessage(CLIENT_ID, request)
+        ).isSameAs(failure);
 
         verifyNoInteractions(
                 inMemoryMessageQueue,
-                messageProcessingService,
                 messageRepository
         );
     }
 
     @Test
     void shouldStopBeforeEnqueueWhenRegistrationReportsPersistenceFailure() {
-        var failure = new DataAccessResourceFailureException("database unavailable");
-        when(messageRegistrationService.register(request)).thenThrow(failure);
+        var failure = new DataAccessResourceFailureException(
+                "database unavailable"
+        );
 
-        assertThatThrownBy(() -> messageService.newMessage(request))
-                .isSameAs(failure);
+        when(messageRegistrationService.register(CLIENT_ID, request))
+                .thenThrow(failure);
+
+        assertThatThrownBy(() ->
+                messageService.newMessage(CLIENT_ID, request)
+        ).isSameAs(failure);
 
         verifyNoInteractions(
                 inMemoryMessageQueue,
-                messageProcessingService,
                 messageRepository
         );
     }
 
     @Test
-    void shouldStopBeforeProcessingWhenEnqueueFails() {
-        when(messageRegistrationService.register(request)).thenReturn(MESSAGE_ID);
+    void shouldPropagateEnqueueFailureWithoutRegisteringAgain() {
+        stubRegistration(PriorityType.NORMAL);
+
         var failure = new IllegalStateException("queue unavailable");
-        doThrow(failure).when(inMemoryMessageQueue).enqueue(MESSAGE_ID);
 
-        assertThatThrownBy(() -> messageService.newMessage(request))
-                .isSameAs(failure);
+        doThrow(failure)
+                .when(inMemoryMessageQueue)
+                .enqueue(MESSAGE_ID, PriorityType.NORMAL);
 
-        verify(messageRegistrationService).register(request);
-        verifyNoInteractions(messageProcessingService, messageRepository);
-    }
+        assertThatThrownBy(() ->
+                messageService.newMessage(CLIENT_ID, request)
+        ).isSameAs(failure);
 
-    @Test
-    void shouldNotReturnSuccessWhenProcessingHasInfrastructureFailure() {
-        when(messageRegistrationService.register(request)).thenReturn(MESSAGE_ID);
-        var failure = new DataAccessResourceFailureException("database unavailable");
-        doThrow(failure).when(messageProcessingService).processPendingMessages();
+        verify(messageRegistrationService, times(1))
+                .register(CLIENT_ID, request);
 
-        assertThatThrownBy(() -> messageService.newMessage(request))
-                .isSameAs(failure);
+        verify(inMemoryMessageQueue, times(1))
+                .enqueue(MESSAGE_ID, PriorityType.NORMAL);
 
-        verify(inMemoryMessageQueue).enqueue(MESSAGE_ID);
         verifyNoInteractions(messageRepository);
     }
 
-    @Test
-    void shouldRejectResponseWhenRegisteredMessageCannotBeFound() {
-        when(messageRegistrationService.register(request)).thenReturn(MESSAGE_ID);
-        when(messageRepository.findById(MESSAGE_ID)).thenReturn(Optional.empty());
+    private void stubRegistration(PriorityType priority) {
+        when(messageRegistrationService.register(CLIENT_ID, request))
+                .thenReturn(registeredMessage);
 
-        assertThatThrownBy(() -> messageService.newMessage(request))
-                .isInstanceOf(MessageNotFoundException.class);
-
-        verify(inMemoryMessageQueue).enqueue(MESSAGE_ID);
-        verify(messageProcessingService).processPendingMessages();
+        when(registeredMessage.getId()).thenReturn(MESSAGE_ID);
+        when(registeredMessage.getPriority()).thenReturn(priority);
+        when(registeredMessage.getStatus()).thenReturn(StatusType.QUEUED);
     }
 }

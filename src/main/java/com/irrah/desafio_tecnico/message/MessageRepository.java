@@ -8,6 +8,8 @@ import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+
+import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -83,4 +85,19 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
             @Param("clientId") Long clientId,
             @Param("conversationIds") Collection<Long> conversationIds,
             @Param("statuses") Collection<StatusType> statuses);
+
+
+    @Query("""
+            select m
+            from Message m
+            where m.nextAttemptAt is not null
+              and m.nextAttemptAt <= :now
+              and m.status = :status
+            order by m.nextAttemptAt, m.id
+            """)
+    List<Message> findAllFailedAndNextAttemptEqualOrLessThan(
+            @Param("now") Instant now,
+            @Param("status") StatusType status,
+            Pageable pageable
+    );
 }

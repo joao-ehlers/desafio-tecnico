@@ -20,7 +20,6 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class BillingServiceTest {
 
-    // Em São Paulo ainda é 31/10, às 23h.
     private static final Clock CLOCK = Clock.fixed(
             Instant.parse("2026-11-01T02:00:00Z"),
             ZoneId.of("America/Sao_Paulo")
@@ -71,7 +70,7 @@ class BillingServiceTest {
     @Test
     void shouldNotRegisterTransactionWhenPostpaidLimitIsInsufficient() {
         Client client = client(PlanType.POSTPAID);
-        Message message = message(client); // Limite inicial zero.
+        Message message = message(client);
 
         assertThatThrownBy(() -> service.chargeMessage(client, message))
                 .isInstanceOf(IllegalStateException.class);

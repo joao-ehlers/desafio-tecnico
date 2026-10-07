@@ -14,14 +14,19 @@ public class MessageProcessingService {
     private final QueueMetrics queueMetrics;
 
     public synchronized void processPendingMessages(){
-        Long messageId;
 
-        while((messageId = inMemoryMessageQueue.dequeue()) != null){
-            StatusType statusType = singleMessageProcessingService.process(messageId);
+        for(int processed = 0; processed < 100; processed ++){
+            Long messageId = inMemoryMessageQueue.dequeue();
 
-            if(statusType == StatusType.SENT){
+            if(messageId == null){
+                break;
+            }
+
+            ProcessingResult result = singleMessageProcessingService.process(messageId);
+
+            if(result == ProcessingResult.SENT){
                 queueMetrics.registerSuccess();
-            }else if(statusType == StatusType.FAILED){
+            }else if(result == ProcessingResult.FAILED){
                 queueMetrics.registerFailure();
             }
         }

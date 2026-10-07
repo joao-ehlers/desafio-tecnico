@@ -2,23 +2,24 @@ package com.irrah.desafio_tecnico.queue;
 
 import org.springframework.stereotype.Component;
 
+import java.util.concurrent.atomic.AtomicLong;
+
 @Component
 public class QueueMetrics {
 
-    private Long sent;
-
-    private Long failed;
+    private final AtomicLong sent = new AtomicLong();
+    private final AtomicLong failed = new AtomicLong();
 
     public synchronized void registerSuccess(){
-        sent++;
+        sent.incrementAndGet();
     }
 
     public synchronized void registerFailure(){
-        failed++;
+        failed.incrementAndGet();
     }
 
     public synchronized Snapshot snapshot(){
-        return new Snapshot(sent, failed);
+        return new Snapshot(sent.get(), failed.get());
     }
 
 
