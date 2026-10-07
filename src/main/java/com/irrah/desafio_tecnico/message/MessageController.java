@@ -21,9 +21,12 @@ public class MessageController {
 
     @PostMapping
     public ResponseEntity<NewMessageResponse> newMessage(
+            @RequestHeader("X-Client-Document") String document,
             @Valid @RequestBody NewMessageRequest request
     ) {
-        return ResponseEntity.status(201).body(messageService.newMessage(request));
+        Long clientId = identificationService.identify(document);
+
+        return ResponseEntity.status(201).body(messageService.newMessage(clientId, request));
     }
 
     @GetMapping
@@ -60,5 +63,23 @@ public class MessageController {
         Long clientId = identificationService.identify(document);
 
         return ResponseEntity.ok(messageQueryService.getStatus(clientId, messageId));
+    }
+
+    @PostMapping("/{id}/delivery-confirmation")
+    public ResponseEntity<MessageStatusResponse> deliveryConfirm(            @PathVariable("id") Long messageId,
+                                                                             @RequestHeader("X-Client-Document") String document
+    ){
+        Long clientId = identificationService.identify(document);
+
+        return ResponseEntity.ok(messageService.confirmDelivery(clientId, messageId));
+    }
+
+    @PostMapping("/{id}/read-confirmation")
+    public ResponseEntity<MessageStatusResponse> readConfirm(                @PathVariable("id") Long messageId,
+                                                                             @RequestHeader("X-Client-Document") String document
+    ){
+        Long clientId = identificationService.identify(document);
+
+        return ResponseEntity.ok(messageService.confirmRead(clientId, messageId));
     }
 }
