@@ -50,7 +50,6 @@ class AsyncBillingIntegrationTest {
         registry.add("spring.flyway.password", POSTGRES::getPassword);
     }
 
-    // Replace only automatic execution: real processing services are invoked below.
     @MockitoBean MessageQueueWorker scheduledWorker;
     @MockitoBean MessageSender sender;
     @MockitoBean Clock clock;
@@ -74,7 +73,6 @@ class AsyncBillingIntegrationTest {
         now.set(Instant.parse("2026-10-07T12:00:00Z"));
         when(clock.instant()).thenAnswer(invocation -> now.get());
         when(clock.getZone()).thenReturn(ZoneId.of("America/Sao_Paulo"));
-        // Only the disposable Testcontainers database is cleared.
         while (queue.dequeue() != null) { }
         transactions.deleteAll();
         messages.deleteAll();
@@ -116,7 +114,7 @@ class AsyncBillingIntegrationTest {
         Message queued = messages.findById(id).orElseThrow();
         assertThat(queued.getStatus()).isEqualTo(StatusType.QUEUED);
         assertThat(queued.getNextAttemptAt()).isNull();
-        retries.enqueueDueRetries(); // Already queued: must not enqueue twice.
+        retries.enqueueDueRetries();
         assertThat(queue.size()).isEqualTo(1);
 
         processing.processPendingMessages();
@@ -199,7 +197,6 @@ class AsyncBillingIntegrationTest {
         Client client = new Client("Empresa", "52998224725", DocumentType.CPF, plan);
         if (plan == PlanType.PREPAID) client.credit(new BigDecimal("10.00"));
         else client.adjustCreditLimit(new BigDecimal("10.00"));
-        // Fixture setup, not a real credit operation: no financial transaction is created here.
         return clients.saveAndFlush(client);
     }
 

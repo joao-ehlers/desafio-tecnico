@@ -62,4 +62,9 @@ public class ClientController {
     public ResponseEntity<LimitResponse> newLimit(@PathVariable Long id, @Valid @RequestBody LimitRequest request){
         return ResponseEntity.ok(clientService.newLimit(id, request));
     }
+
+    @PutMapping("/{id}/plan-switch")
+    public ResponseEntity<SwitchResponse> planSwitch(@PathVariable Long id){
+        return ResponseEntity.ok(clientService.planSwitch(id));
+    }
 }
