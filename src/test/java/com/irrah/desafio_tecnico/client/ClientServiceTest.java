@@ -3,10 +3,14 @@ package com.irrah.desafio_tecnico.client;
 import com.irrah.desafio_tecnico.billing.FinancialTransaction;
 import com.irrah.desafio_tecnico.billing.FinancialTransactionRepository;
 import com.irrah.desafio_tecnico.billing.TransactionType;
+import com.irrah.desafio_tecnico.billing.exception.ExceedingValueException;
+import com.irrah.desafio_tecnico.billing.exception.WrongConsumingMonthException;
 import com.irrah.desafio_tecnico.client.dto.*;
+import com.irrah.desafio_tecnico.client.exception.ClientNotActiveException;
 import com.irrah.desafio_tecnico.client.exception.ClientNotFoundException;
 import com.irrah.desafio_tecnico.client.exception.DuplicateDocumentException;
 import com.irrah.desafio_tecnico.client.exception.InactiveClientException;
+import com.irrah.desafio_tecnico.shared.exception.InvalidInputException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -120,7 +124,7 @@ class ClientServiceTest {
         var request = registration(document, PlanType.PREPAID);
 
         assertThatThrownBy(() -> clientService.registerClient(request))
-                .isInstanceOf(IllegalArgumentException.class);
+                .isInstanceOf(InvalidInputException.class);
 
         verifyNoInteractions(clientRepository);
     }
@@ -132,7 +136,7 @@ class ClientServiceTest {
         );
 
         assertThatThrownBy(() -> clientService.registerClient(request))
-                .isInstanceOf(IllegalArgumentException.class);
+                .isInstanceOf(InvalidInputException.class);
 
         verifyNoInteractions(clientRepository);
     }
@@ -223,7 +227,7 @@ class ClientServiceTest {
         when(clientRepository.findById(CLIENT_ID)).thenReturn(Optional.of(target));
 
         assertThatThrownBy(() -> clientService.updateClient(CLIENT_ID, request))
-                .isInstanceOf(IllegalArgumentException.class);
+                .isInstanceOf(InvalidInputException.class);
 
         assertThat(target.getName()).isEqualTo("Cliente Exemplo");
         assertThat(target.getDocumentId()).isEqualTo(CPF);
@@ -262,7 +266,7 @@ class ClientServiceTest {
     @Test
     void shouldRejectAuthenticationWithInvalidDocumentBeforeQueryingRepository() {
         assertThatThrownBy(() -> clientService.authenticate(new AuthRequest("11111111111")))
-                .isInstanceOf(IllegalArgumentException.class);
+                .isInstanceOf(InvalidInputException.class);
 
         verifyNoInteractions(clientRepository);
     }
@@ -393,7 +397,7 @@ class ClientServiceTest {
         assertThatThrownBy(() -> clientService.addCredit(
                 CLIENT_ID,
                 new CreditRequest(new BigDecimal("50.00"))
-        )).isInstanceOf(IllegalStateException.class);
+        )).isInstanceOf(ClientNotActiveException.class);
 
         assertThat(client.getBalance()).isEqualByComparingTo("0.00");
         verifyNoInteractions(financialTransactionRepository);
@@ -414,7 +418,7 @@ class ClientServiceTest {
         assertThatThrownBy(() -> clientService.addCredit(
                 CLIENT_ID,
                 new CreditRequest(amount)
-        )).isInstanceOf(IllegalArgumentException.class);
+        )).isInstanceOf(InvalidInputException.class);
 
         assertThat(client.getBalance()).isEqualByComparingTo("0.00");
         verifyNoInteractions(financialTransactionRepository);
@@ -432,7 +436,7 @@ class ClientServiceTest {
         assertThatThrownBy(() -> clientService.addCredit(
                 CLIENT_ID,
                 new CreditRequest(new BigDecimal("0.01"))
-        )).isInstanceOf(IllegalStateException.class);
+        )).isInstanceOf(ExceedingValueException.class);
 
         assertThat(client.getBalance())
                 .isEqualByComparingTo("9999999999.99");
@@ -536,7 +540,7 @@ class ClientServiceTest {
         when(clientRepository.findById(1L)).thenReturn(Optional.of(client));
 
         assertThatThrownBy(() -> clientService.getBalance(1L))
-                .isInstanceOf(IllegalStateException.class);
+                .isInstanceOf(WrongConsumingMonthException.class);
     }
 
     @Test

@@ -1,5 +1,6 @@
 package com.irrah.desafio_tecnico.billing;
 
+import com.irrah.desafio_tecnico.billing.exception.InsufficientFundsException;
 import com.irrah.desafio_tecnico.client.*;
 import com.irrah.desafio_tecnico.conversation.Conversation;
 import com.irrah.desafio_tecnico.conversation.Recipient;
@@ -73,7 +74,7 @@ class BillingServiceTest {
         Message message = message(client);
 
         assertThatThrownBy(() -> service.chargeMessage(client, message))
-                .isInstanceOf(IllegalStateException.class);
+                .isInstanceOf(InsufficientFundsException.class);
 
         verifyNoInteractions(transactionRepository);
         assertThat(client.getMonthlyConsumption()).isEqualByComparingTo("0");
@@ -86,7 +87,7 @@ class BillingServiceTest {
         Message message = message(client);
 
         assertThatThrownBy(() -> service.chargeMessage(client, message))
-                .isInstanceOf(IllegalStateException.class);
+                .isInstanceOf(InsufficientFundsException.class);
 
         verifyNoInteractions(transactionRepository);
         assertThat(client.getBalance()).isEqualByComparingTo("0");

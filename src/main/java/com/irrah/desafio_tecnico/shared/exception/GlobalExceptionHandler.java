@@ -1,14 +1,17 @@
 package com.irrah.desafio_tecnico.shared.exception;
 
-import com.irrah.desafio_tecnico.client.exception.ClientNotFoundException;
-import com.irrah.desafio_tecnico.client.exception.DuplicateDocumentException;
-import com.irrah.desafio_tecnico.client.exception.InactiveClientException;
+import com.irrah.desafio_tecnico.billing.exception.ExceedingValueException;
+import com.irrah.desafio_tecnico.billing.exception.InsufficientFundsException;
+import com.irrah.desafio_tecnico.billing.exception.WrongConsumingMonthException;
+import com.irrah.desafio_tecnico.client.exception.*;
 import com.irrah.desafio_tecnico.conversation.exception.ConversationNotFoundException;
 import com.irrah.desafio_tecnico.conversation.exception.RecipientNotFoundException;
+import com.irrah.desafio_tecnico.message.exception.InvalidMessageStateException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
+import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -121,17 +124,6 @@ public class GlobalExceptionHandler {
         );
     }
 
-    @ExceptionHandler(IllegalArgumentException.class)
-    public ProblemDetail handleInvalidArgument(
-            IllegalArgumentException exception
-    ) {
-        return problem(
-                HttpStatus.BAD_REQUEST,
-                "Argumento inválido",
-                "Um dos valores informados não atende às regras da operação."
-        );
-    }
-
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ProblemDetail handleDataIntegrity(
             DataIntegrityViolationException exception
@@ -153,6 +145,39 @@ public class GlobalExceptionHandler {
                 "O registro foi alterado por outra operação. "
                         + "Consulte os dados novamente antes de tentar."
         );
+    }
+
+    @ExceptionHandler(InvalidInputException.class)
+    public ResponseEntity<ProblemDetail> handleInvalidInput(
+            InvalidInputException exception
+    ) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                HttpStatus.BAD_REQUEST,
+                exception.getMessage()
+        );
+        problem.setTitle("Dados inválidos");
+
+        return ResponseEntity.badRequest().body(problem);
+    }
+
+    @ExceptionHandler({
+            InsufficientFundsException.class,
+            InvalidPlanOperationException.class,
+            InvalidMessageStateException.class,
+            ExceedingValueException.class,
+            WrongConsumingMonthException.class,
+            ClientNotActiveException.class
+    })
+    public ResponseEntity<ProblemDetail> handleBusinessConflict(
+            RuntimeException exception
+    ) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                HttpStatus.CONFLICT,
+                exception.getMessage()
+        );
+        problem.setTitle("Operação não permitida no estado atual");
+
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(problem);
     }
 
     private ProblemDetail problem(

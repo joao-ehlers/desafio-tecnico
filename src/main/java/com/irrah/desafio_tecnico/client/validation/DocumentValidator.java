@@ -1,6 +1,7 @@
 package com.irrah.desafio_tecnico.client.validation;
 
 import com.irrah.desafio_tecnico.client.DocumentType;
+import com.irrah.desafio_tecnico.shared.exception.InvalidInputException;
 
 import java.util.Locale;
 import java.util.regex.Pattern;
@@ -37,7 +38,7 @@ public final class DocumentValidator {
             DocumentType documentType
     ) {
         if (documentType == null) {
-            throw new IllegalArgumentException(
+            throw new InvalidInputException(
                     "o tipo do documento é obrigatório"
             );
         }
@@ -50,7 +51,7 @@ public final class DocumentValidator {
         };
 
         if (!valid) {
-            throw new IllegalArgumentException(
+            throw new InvalidInputException(
                     "documento inválido para o tipo " + documentType
             );
         }
@@ -70,7 +71,7 @@ public final class DocumentValidator {
 
     private static String normalize(String documentId) {
         if (documentId == null || documentId.isBlank()) {
-            throw new IllegalArgumentException(
+            throw new InvalidInputException(
                     "o documento é obrigatório"
             );
         }
@@ -80,7 +81,7 @@ public final class DocumentValidator {
 
         if (!CPF_INPUT.matcher(value).matches()
                 && !CNPJ_INPUT.matcher(value).matches()) {
-            throw new IllegalArgumentException(
+            throw new InvalidInputException(
                     "formato de documento inválido"
             );
         }

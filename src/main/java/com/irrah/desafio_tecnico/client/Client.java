@@ -1,5 +1,10 @@
 package com.irrah.desafio_tecnico.client;
 
+import com.irrah.desafio_tecnico.billing.exception.ExceedingValueException;
+import com.irrah.desafio_tecnico.billing.exception.InsufficientFundsException;
+import com.irrah.desafio_tecnico.client.exception.ClientNotActiveException;
+import com.irrah.desafio_tecnico.client.exception.InvalidPlanOperationException;
+import com.irrah.desafio_tecnico.shared.exception.InvalidInputException;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.NotBlank;
@@ -82,25 +87,25 @@ public class Client {
 
     public Client(String name, String documentId, DocumentType documentType, PlanType planType) {
         if (name == null || name.isBlank()) {
-            throw new IllegalArgumentException(
+            throw new InvalidInputException(
                     "o nome do cliente é obrigatório"
             );
         }
 
         if (documentId == null || documentId.isBlank()) {
-            throw new IllegalArgumentException(
+            throw new InvalidInputException(
                     "o documento do cliente é obrigatório"
             );
         }
 
         if (documentType == null) {
-            throw new IllegalArgumentException(
+            throw new InvalidInputException(
                     "o tipo do documento é obrigatório"
             );
         }
 
         if (planType == null) {
-            throw new IllegalArgumentException(
+            throw new InvalidInputException(
                     "o tipo de plano é obrigatório"
             );
         }
@@ -123,19 +128,19 @@ public class Client {
         validateAmount(amount);
 
         if (!this.active) {
-            throw new IllegalStateException(
+            throw new ClientNotActiveException(
                     "cliente inativo não pode receber créditos"
             );
         }
 
         if(this.planType != PlanType.PREPAID){
-            throw new IllegalStateException("para essa operacao de credito, a conta deve possuir o plano pre-pago");
+            throw new InvalidPlanOperationException("para essa operacao de credito, a conta deve possuir o plano pre-pago");
         }
 
         BigDecimal newBalance = this.balance.add(amount);
 
         if(newBalance.compareTo(MAX_BALANCE) > 0){
-            throw new IllegalStateException("o valor excede o maximo de saldo permitido");
+            throw new ExceedingValueException("o valor excede o maximo de saldo permitido");
         }
 
         this.balance = newBalance.setScale(2, RoundingMode.UNNECESSARY);
@@ -145,15 +150,15 @@ public class Client {
         validateAmount(amount);
 
         if(!this.active){
-            throw new IllegalStateException("cliente inativado nao pode realizar operacao de debito");
+            throw new ClientNotActiveException("cliente inativado nao pode realizar operacao de debito");
         }
 
         if(this.planType != PlanType.PREPAID){
-            throw new IllegalStateException("para essa operacao de debito, a conta deve possuir o plano pre-pago");
+            throw new InvalidPlanOperationException("para essa operacao de debito, a conta deve possuir o plano pre-pago");
         }
 
         if(this.balance.compareTo(amount) < 0){
-            throw new IllegalStateException("saldo insuficiente");
+            throw new InsufficientFundsException("saldo insuficiente");
         }
 
         this.balance = this.balance.subtract(amount).setScale(2, RoundingMode.UNNECESSARY);
@@ -161,27 +166,27 @@ public class Client {
 
     public void adjustCreditLimit(BigDecimal newLimit){
         if (newLimit == null || newLimit.signum() < 0) {
-            throw new IllegalArgumentException(
+            throw new InvalidInputException(
                     "o limite não pode ser negativo"
             );
         }
 
         if (newLimit.stripTrailingZeros().scale() > 2) {
-            throw new IllegalArgumentException(
+            throw new InvalidInputException(
                     "o limite deve possuir no máximo 2 casas decimais"
             );
         }
 
         if(!this.active){
-            throw new IllegalStateException("cliente inativado nao pode ter o limite ajustado");
+            throw new ClientNotActiveException("cliente inativado nao pode ter o limite ajustado");
         }
 
         if(this.planType != PlanType.POSTPAID){
-            throw new IllegalStateException("para operacao de ajuste de crédito, a conta deve possuir o plano pós-pago");
+            throw new InvalidPlanOperationException("para operacao de ajuste de crédito, a conta deve possuir o plano pós-pago");
         }
 
         if(newLimit.compareTo(MAX_BALANCE) > 0){
-            throw new IllegalStateException("o valor excede o maximo de credito permitido");
+            throw new ExceedingValueException("o valor excede o maximo de credito permitido");
         }
 
         this.creditLimit = newLimit.setScale(2, RoundingMode.UNNECESSARY);
@@ -191,21 +196,21 @@ public class Client {
         validateAmount(amount);
 
         if(referenceMonth == null){
-            throw new IllegalArgumentException("O mês de referência não pode ser nulo");
+            throw new InvalidInputException("O mês de referência não pode ser nulo");
         }
 
         LocalDate month = referenceMonth.withDayOfMonth(1);
 
         if(this.consumptionMonth != null && month.isBefore(this.consumptionMonth)){
-            throw new IllegalArgumentException("O mês de referência não pode ser anterior ao mês de consumo atual");
+            throw new InvalidInputException("O mês de referência não pode ser anterior ao mês de consumo atual");
         }
 
         if(!this.active){
-            throw new IllegalStateException("cliente inativado nao pode realizar operacao de consumo");
+            throw new ClientNotActiveException("cliente inativado nao pode realizar operacao de consumo");
         }
 
         if(this.planType != PlanType.POSTPAID){
-            throw new IllegalStateException("a operacao de consumo exige plano pós-pago");
+            throw new InvalidPlanOperationException("a operacao de consumo exige plano pós-pago");
         }
 
         BigDecimal actualConsumption = this.consumptionMonth == null || month.isAfter(this.consumptionMonth) ?
@@ -215,7 +220,7 @@ public class Client {
         actualConsumption = actualConsumption.add(amount);
 
         if(actualConsumption.compareTo(creditLimit) > 0){
-            throw new IllegalStateException("o limite disponível é insuficiente");
+            throw new InsufficientFundsException("o limite disponível é insuficiente");
         }
 
         this.monthlyConsumption = actualConsumption.setScale(2, RoundingMode.UNNECESSARY);
@@ -224,13 +229,13 @@ public class Client {
 
     private void validateAmount(BigDecimal amount){
         if(amount == null || amount.signum() <= 0){
-            throw new IllegalArgumentException(
+            throw new InvalidInputException(
                     "o valor deve ser maior que zero"
             );
         }
 
         if(amount.stripTrailingZeros().scale() > 2){
-            throw new IllegalArgumentException(
+            throw new InvalidInputException(
                     "o valor deve possuir no maximo 2 casas decimais"
             );
         }
@@ -242,15 +247,15 @@ public class Client {
             DocumentType documentType
     ) {
         if (name == null || name.isBlank()) {
-            throw new IllegalArgumentException("o nome é obrigatório");
+            throw new InvalidInputException("o nome é obrigatório");
         }
 
         if (documentId == null || documentId.isBlank()) {
-            throw new IllegalArgumentException("o documento é obrigatório");
+            throw new InvalidInputException("o documento é obrigatório");
         }
 
         if (documentType == null) {
-            throw new IllegalArgumentException(
+            throw new InvalidInputException(
                     "o tipo do documento é obrigatório"
             );
         }

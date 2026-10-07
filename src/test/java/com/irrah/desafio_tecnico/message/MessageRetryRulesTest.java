@@ -1,5 +1,7 @@
 package com.irrah.desafio_tecnico.message;
 
+import com.irrah.desafio_tecnico.message.exception.InvalidMessageStateException;
+import com.irrah.desafio_tecnico.shared.exception.InvalidInputException;
 import com.irrah.desafio_tecnico.support.MessageFixtures;
 import org.junit.jupiter.api.Test;
 import java.time.*;
@@ -29,7 +31,7 @@ class MessageRetryRulesTest {
         Message message = MessageFixtures.queued();
         message.startProcessing(); message.markAsFailed(NOW, 3, DELAY);
         assertThatThrownBy(() -> message.queueForRetry(NOW.plusSeconds(4)))
-                .isInstanceOf(IllegalStateException.class);
+                .isInstanceOf(InvalidMessageStateException.class);
         assertThat(message.getStatus()).isEqualTo(StatusType.FAILED);
         assertThat(message.getNextAttemptAt()).isEqualTo(NOW.plusSeconds(5));
         message.queueForRetry(NOW.plusSeconds(5));
@@ -52,7 +54,7 @@ class MessageRetryRulesTest {
         assertThat(message.getStatus()).isEqualTo(StatusType.FAILED);
         assertThat(message.getNextAttemptAt()).isNull();
         assertThatThrownBy(() -> message.queueForRetry(NOW.plusSeconds(100)))
-                .isInstanceOf(IllegalStateException.class);
+                .isInstanceOf(InvalidMessageStateException.class);
     }
 
     @Test void shouldAllowSuccessAfterRetryWithoutSchedulingAnotherAttempt() {
@@ -66,21 +68,21 @@ class MessageRetryRulesTest {
         message.markAsDelivered(); message.markAsRead();
         assertThat(message.getStatus()).isEqualTo(StatusType.READ);
         assertThatThrownBy(() -> message.queueForRetry(NOW.plusSeconds(30)))
-                .isInstanceOf(IllegalStateException.class);
+                .isInstanceOf(InvalidMessageStateException.class);
     }
 
     @Test void shouldRejectInvalidTransitionsWithoutChangingAttempts() {
         Message message = MessageFixtures.queued();
-        assertThatThrownBy(message::markAsSent).isInstanceOf(IllegalStateException.class);
-        assertThatThrownBy(message::markAsDelivered).isInstanceOf(IllegalStateException.class);
-        assertThatThrownBy(message::markAsRead).isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(message::markAsSent).isInstanceOf(InvalidMessageStateException.class);
+        assertThatThrownBy(message::markAsDelivered).isInstanceOf(InvalidMessageStateException.class);
+        assertThatThrownBy(message::markAsRead).isInstanceOf(InvalidMessageStateException.class);
         assertThatThrownBy(() -> message.markAsFailed(NOW, 3, DELAY))
-                .isInstanceOf(IllegalStateException.class);
+                .isInstanceOf(InvalidMessageStateException.class);
         assertThatThrownBy(() -> message.queueForRetry(NOW))
-                .isInstanceOf(IllegalStateException.class);
+                .isInstanceOf(InvalidMessageStateException.class);
         assertThat(message.getAttempts()).isZero();
         message.startProcessing();
-        assertThatThrownBy(message::startProcessing).isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(message::startProcessing).isInstanceOf(InvalidMessageStateException.class);
         assertThat(message.getAttempts()).isEqualTo(1);
     }
 
@@ -88,15 +90,15 @@ class MessageRetryRulesTest {
         Message message = MessageFixtures.queued();
         message.startProcessing();
         assertThatThrownBy(() -> message.markAsFailed(null, 3, DELAY))
-                .isInstanceOf(IllegalArgumentException.class);
+                .isInstanceOf(InvalidInputException.class);
         assertThatThrownBy(() -> message.markAsFailed(NOW, 0, DELAY))
-                .isInstanceOf(IllegalArgumentException.class);
+                .isInstanceOf(InvalidInputException.class);
         assertThatThrownBy(() -> message.markAsFailed(NOW, 3, null))
-                .isInstanceOf(IllegalArgumentException.class);
+                .isInstanceOf(InvalidInputException.class);
         assertThatThrownBy(() -> message.markAsFailed(NOW, 3, Duration.ZERO))
-                .isInstanceOf(IllegalArgumentException.class);
+                .isInstanceOf(InvalidInputException.class);
         assertThatThrownBy(() -> message.markAsFailed(NOW, 3, Duration.ofSeconds(-1)))
-                .isInstanceOf(IllegalArgumentException.class);
+                .isInstanceOf(InvalidInputException.class);
         assertThat(message.getStatus()).isEqualTo(StatusType.PROCESSING);
         assertThat(message.getNextAttemptAt()).isNull();
     }

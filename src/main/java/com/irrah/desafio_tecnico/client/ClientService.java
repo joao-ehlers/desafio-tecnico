@@ -3,6 +3,7 @@ package com.irrah.desafio_tecnico.client;
 import com.irrah.desafio_tecnico.billing.FinancialTransaction;
 import com.irrah.desafio_tecnico.billing.FinancialTransactionRepository;
 import com.irrah.desafio_tecnico.billing.TransactionType;
+import com.irrah.desafio_tecnico.billing.exception.WrongConsumingMonthException;
 import com.irrah.desafio_tecnico.client.dto.*;
 import com.irrah.desafio_tecnico.client.exception.ClientNotFoundException;
 import com.irrah.desafio_tecnico.client.exception.DuplicateDocumentException;
@@ -70,7 +71,7 @@ public class ClientService {
 
                 if (consumptionMonth != null
                         && consumptionMonth.isAfter(referenceMonth)) {
-                    throw new IllegalStateException(
+                        throw new WrongConsumingMonthException(
                             "o mês de consumo registrado está no futuro"
                     );
                 }

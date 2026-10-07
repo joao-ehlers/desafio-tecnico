@@ -7,6 +7,7 @@ import com.irrah.desafio_tecnico.message.MessageRepository;
 import com.irrah.desafio_tecnico.message.StatusType;
 import com.irrah.desafio_tecnico.message.projection.LatestMessageView;
 import com.irrah.desafio_tecnico.message.projection.UnreadCountView;
+import com.irrah.desafio_tecnico.shared.exception.InvalidInputException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -196,7 +197,7 @@ class ConversationQueryServiceTest {
     @CsvSource({"-1,20", "0,0", "0,-1", "0,101"})
     void shouldRejectInvalidPagination(int page, int size) {
         assertThatThrownBy(() -> service.listConversations(CLIENT_ID, page, size))
-                .isInstanceOf(IllegalArgumentException.class);
+                .isInstanceOf(InvalidInputException.class);
         verifyNoInteractions(clientRepository, conversationRepository, messageRepository);
     }
 

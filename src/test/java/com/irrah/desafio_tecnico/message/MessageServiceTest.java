@@ -1,6 +1,7 @@
 package com.irrah.desafio_tecnico.message;
 
 import com.irrah.desafio_tecnico.message.dto.NewMessageRequest;
+import com.irrah.desafio_tecnico.message.exception.InvalidMessageStateException;
 import com.irrah.desafio_tecnico.queue.InMemoryMessageQueue;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -84,7 +85,7 @@ class MessageServiceTest {
     @Test
     void shouldStopBeforeEnqueueWhenRegistrationFails() {
         var failure =
-                new IllegalArgumentException("invalid message request");
+                new InvalidMessageStateException("invalid message request");
 
         when(messageRegistrationService.register(CLIENT_ID, request))
                 .thenThrow(failure);
@@ -122,7 +123,7 @@ class MessageServiceTest {
     void shouldPropagateEnqueueFailureWithoutRegisteringAgain() {
         stubRegistration(PriorityType.NORMAL);
 
-        var failure = new IllegalStateException("queue unavailable");
+        var failure = new InvalidMessageStateException("queue unavailable");
 
         doThrow(failure)
                 .when(inMemoryMessageQueue)
