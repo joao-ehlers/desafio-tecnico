@@ -31,9 +31,9 @@ public class MessageRegistrationService {
     private final Clock clock;
 
     @Transactional
-    public Long register(NewMessageRequest request){
+    public Message register(Long id, NewMessageRequest request){
 
-        Client client = clientRepository.findById(request.clientId()).orElseThrow(ClientNotFoundException::new);
+        Client client = clientRepository.findById(id).orElseThrow(ClientNotFoundException::new);
 
 
         if (!client.isActive()) {
@@ -49,7 +49,7 @@ public class MessageRegistrationService {
 
         billingService.chargeMessage(client, message);
 
-        return message.getId();
+        return message;
     }
 
     private Conversation resolveConversation(NewMessageRequest request, Client client){

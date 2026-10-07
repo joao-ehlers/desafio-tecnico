@@ -1,5 +1,7 @@
 package com.irrah.desafio_tecnico.queue;
 
+import com.irrah.desafio_tecnico.message.PriorityType;
+import com.irrah.desafio_tecnico.message.StatusType;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayDeque;
@@ -8,21 +10,46 @@ import java.util.Queue;
 @Component
 public class InMemoryMessageQueue {
 
-    private final Queue<Long> pendingMessages = new ArrayDeque<>();
+    private final Queue<Long> normalQueue = new ArrayDeque<>();
+    private final Queue<Long> urgentQueue = new ArrayDeque<>();
 
-    public synchronized void enqueue(Long messageId){
+    private int consecutiveUrgent = 0;
+    private final int MAX_CONSECUTIVE_URGENT = 3;
+
+    public synchronized void enqueue(Long messageId, PriorityType priorityType){
         if(messageId == null){
             throw new IllegalArgumentException("O ID da mensagem é obrigatorio");
         }
+        if(priorityType == null){
+            throw new IllegalArgumentException("A prioridade da mensagem é obrigatoria");
+        }
 
-        pendingMessages.offer(messageId);
+        switch (priorityType){
+            case URGENT -> urgentQueue.offer(messageId);
+            case NORMAL -> normalQueue.offer(messageId);
+        }
     }
 
     public synchronized Long dequeue(){
-        return pendingMessages.poll();
+        if(urgentQueue.isEmpty() && normalQueue.isEmpty()){
+            consecutiveUrgent = 0;
+            return null;
+        }
+
+        if(!urgentQueue.isEmpty() && (this.consecutiveUrgent < this.MAX_CONSECUTIVE_URGENT || normalQueue.isEmpty())) {
+            consecutiveUrgent = Math.min(
+                    consecutiveUrgent + 1,
+                    MAX_CONSECUTIVE_URGENT
+            );
+
+            return urgentQueue.poll();
+        }
+
+        this.consecutiveUrgent = 0;
+        return normalQueue.poll();
     }
 
     public synchronized int size(){
-        return pendingMessages.size();
+        return normalQueue.size() + urgentQueue.size();
     }
 }
