@@ -1,32 +1,24 @@
 package com.irrah.desafio_tecnico.message;
 
 import com.irrah.desafio_tecnico.message.exception.MessageDeliveryException;
-import com.irrah.desafio_tecnico.message.exception.MessageNotFoundException;
-import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 @RequiredArgsConstructor
 @Service
 public class SingleMessageProcessingService {
-    private final MessageRepository messageRepository;
     private final MessageSender messageSender;
+    private final MessageStateService messageStateService;
 
-    @Transactional
-    public StatusType process(Long messageId){
-
-        Message message = messageRepository.findById(messageId).orElseThrow(MessageNotFoundException::new);
-
-        message.startProcessing();
+    public ProcessingResult process(Long messageId){
+        Message message = messageStateService.startProcessing(messageId);
 
         try{
             messageSender.sendMessage(message);
         }catch (MessageDeliveryException e){
-            message.markAsFailed();
-            return message.getStatus();
+            return messageStateService.markAsFailed(message.getId());
         }
 
-        message.markAsSent();
-        return message.getStatus();
+        return messageStateService.markAsSent(message.getId());
     }
 }

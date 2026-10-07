@@ -15,23 +15,19 @@ import org.springframework.stereotype.Service;
 public class MessageService {
     private final InMemoryMessageQueue inMemoryMessageQueue;
     private final MessageRegistrationService messageRegistrationService;
-    private final MessageProcessingService messageProcessingService;
     private final MessageRepository messageRepository;
 
     public NewMessageResponse newMessage(Long id, NewMessageRequest request){
-        Message registered =  messageRegistrationService.register(id, request);
+        Message message =  messageRegistrationService.register(id, request);
 
-        inMemoryMessageQueue.enqueue(registered.getId(), registered.getPriority());
-
-        messageProcessingService.processPendingMessages();
-
-        Message message = messageRepository.findById(registered.getId())
-                .orElseThrow(MessageNotFoundException::new);
-
-        return NewMessageResponse.builder()
+        NewMessageResponse response = NewMessageResponse.builder()
                 .messageId(message.getId())
                 .statusType(message.getStatus())
                 .build();
+
+        inMemoryMessageQueue.enqueue(message.getId(), message.getPriority());
+
+        return response;
     }
 
     @Transactional

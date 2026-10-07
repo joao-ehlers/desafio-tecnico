@@ -5,10 +5,12 @@ import com.irrah.desafio_tecnico.conversation.dto.ConversationResponse;
 import com.irrah.desafio_tecnico.message.MessageQueryService;
 import com.irrah.desafio_tecnico.message.dto.MessageResponse;
 import com.irrah.desafio_tecnico.shared.dto.PageResponse;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+@Tag(name = "Conversas", description = "Listagem de conversas e histórico de mensagens do cliente")
 @RequiredArgsConstructor
 @RestController
 @RequestMapping("/conversations")

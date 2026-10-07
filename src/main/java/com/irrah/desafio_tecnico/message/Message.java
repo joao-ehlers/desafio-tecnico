@@ -8,6 +8,7 @@ import jakarta.validation.constraints.NotNull;
 import lombok.*;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.Instant;
 
 
@@ -58,6 +59,12 @@ public class Message {
     @Column(nullable = false)
     private ChannelType channel;
 
+    @Column(nullable = false)
+    private int attempts = 0;
+
+    @Column(name = "next_attempt_at")
+    private Instant nextAttemptAt;
+
     public Message(Conversation conversation, Client sender, String content, Instant timestamp, PriorityType priority, ChannelType channel) {
 
         if (conversation == null) {
@@ -106,6 +113,8 @@ public class Message {
         }
 
         this.status = StatusType.PROCESSING;
+        this.attempts++;
+        this.nextAttemptAt = null;
     }
 
     public void markAsSent(){
@@ -124,12 +133,32 @@ public class Message {
         this.status = StatusType.DELIVERED;
     }
 
-    public void markAsFailed(){
+    public void markAsFailed(
+            Instant now,
+            int maxAttempts,
+            Duration retryDelay
+    ){
         if(this.status != StatusType.PROCESSING){
             throw new IllegalStateException("Somente mensagens em processamento podem  falhar");
         }
 
+        if(now == null){
+            throw new IllegalArgumentException("o horário é obrigatório");
+        }
+
+        if(maxAttempts < 1){
+            throw new IllegalArgumentException("o número máximo de tentativas deve ser maior que zero");
+        }
+
+        if(retryDelay == null || retryDelay.isNegative() || retryDelay.isZero()){
+            throw new IllegalArgumentException("o delay entre tentativas é obrigatório");
+        }
+
+        Instant nextAttempt = (this.attempts < maxAttempts) ?
+                now.plus(retryDelay) : null;
+
         this.status = StatusType.FAILED;
+        this.nextAttemptAt = nextAttempt;
     }
 
     public void markAsRead(){
@@ -138,5 +167,22 @@ public class Message {
         }
 
         this.status = StatusType.READ;
+    }
+
+    public void queueForRetry(Instant now){
+        if(now == null){
+            throw new IllegalArgumentException("o horário é obrigatório");
+        }
+
+        if(this.status != StatusType.FAILED || this.nextAttemptAt == null){
+            throw new IllegalStateException("a mensagem não possui nova tentativa agendada");
+        }
+
+        if(now.isBefore(this.nextAttemptAt)){
+            throw new IllegalStateException("o horário da próxima tentativa ainda não chegou");
+        }
+
+        this.status = StatusType.QUEUED;
+        this.nextAttemptAt = null;
     }
 }
