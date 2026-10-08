@@ -4,8 +4,10 @@ API para comunicação entre empresas clientes e destinatários finais, com fila
 memória, priorização, processamento assíncrono simulado e cobrança por mensagem.
 
 O projeto evoluiu de FIFO síncrono para duas filas com balanceamento de prioridades
-e um worker em background. A versão atual inclui retry limitado e histórico
-persistido no PostgreSQL. O envio não utiliza um provedor real de SMS ou WhatsApp.
+e um worker em background. A versão atual inclui retry limitado, histórico
+persistido no PostgreSQL e recuperação da fila na inicialização: mensagens
+`QUEUED` que estavam no banco são recolocadas na fila em memória quando a
+aplicação sobe. O envio não utiliza um provedor real de SMS ou WhatsApp.
 
 ## Tecnologias
 
@@ -41,8 +43,17 @@ O arquivo `.env` não deve ser versionado. Em seguida:
 docker compose up --build
 ```
 
+Com a aplicação no ar, a documentação interativa (Swagger UI) fica em
+`http://localhost:8086/swagger-ui.html`, e é possível testar os endpoints por lá.
+Os endpoints de mensagens e conversas exigem o header `X-Client-Document`
+(veja [Identificação das requisições](#identificação-das-requisições)).
+
+Para um passo a passo de cadastro, recarga e envio, veja [Exemplo de utilização](#exemplo-de-utilização).
+
 Endereço utilizado no desenvolvimento: `http://localhost:8086`. Confira o
 mapeamento de portas no Compose caso tenha sido alterado.
+
+Para acompanhar os logs e encerrar a aplicação:
 
 ```bash
 docker compose logs -f
@@ -101,6 +112,10 @@ As listagens de mensagens e conversas utilizam `page` a partir de zero e `size`
 entre 1 e 100 (padrão 20). A listagem de mensagens aceita `conversationId`, `status`,
 `priority` e `channel`. Enums são enviados como `NORMAL`, `URGENT`, `SMS`, `WHATSAPP`,
 `SENT` etc., conforme os tipos Java.
+
+Enquanto a fila não estiver pronta (recuperação na inicialização em andamento),
+`POST /messages` responde `503 Service Unavailable`. Nenhuma mensagem é registrada
+nem cobrada nesse caso.
 
 ## Exemplo de utilização
 
@@ -176,6 +191,9 @@ novamente. Confirmações repetidas/inválidas são rejeitadas pela regra de tra
 - `MessageStateService`: persiste cada transição em uma transação própria.
 - `MessageRetryService`: busca tentativas vencidas e as recoloca na fila.
 - Services de consulta: DTOs, paginação e filtros por proprietário.
+- `QueueRecoveryService`: lê do banco as mensagens `QUEUED` em lotes e as recoloca na fila.
+- `QueueInitializer`: `ApplicationRunner` que dispara a recuperação na inicialização.
+- `QueueReadiness`: indica se a fila já foi reconstruída (`volatile`, começa em `false`).
 
 Controllers recebem requisições e delegam. Entidades preservam regras de negócio;
 services coordenam transações. A API retorna DTOs, sem expor entidades JPA.
@@ -216,13 +234,17 @@ A fila armazena IDs em duas `ArrayDeque`, uma normal e uma urgente. Cada uma
 preserva FIFO. Com ambas abastecidas, atende até três urgentes antes de atender
 uma normal. Com apenas uma abastecida, continua processando-a.
 
+Um mesmo ID não ocupa a fila duas vezes: se já estiver aguardando, em qualquer das
+duas filas, um novo `enqueue` é ignorado (vale a prioridade da primeira inserção).
+Após o `dequeue`, o ID pode ser enfileirado novamente, como ocorre nos retries.
+
 A decisão e o contador de urgentes consecutivas ficam no `dequeue()`. Operações
 na fila são sincronizadas. O contador não é reiniciado entre lotes; é zerado ao
 atender uma normal ou observar ambas as filas vazias.
 
 O worker utiliza `@Scheduled` e uma execução coordenada por vez na instância.
-Primeiro busca até 100 retries vencidos e depois processa até 100 itens da fila.
-Ao terminar, aguarda o intervalo antes da próxima execução:
+Enquanto a fila não estiver pronta, a execução é ignorada. Depois disso, primeiro
+busca até 100 retries vencidos e então processa até 100 itens da fila.
 
 ```properties
 queue.worker.delay-ms=500
@@ -231,6 +253,35 @@ queue.worker.delay-ms=500
 Esse intervalo não é uma espera entre mensagens. O envio HTTP não chama mais o
 processamento. A confirmação de `PROCESSING`, o envio simulado e a confirmação do
 resultado são etapas separadas; o envio ocorre fora da transação de estado.
+
+### Recuperação da fila na inicialização
+
+A fila é em memória e se perde em um restart, mas as mensagens continuam no banco.
+Para evitar mensagens `QUEUED` órfãs, a aplicação reconstrói a fila ao subir:
+
+1. O `QueueInitializer` (`ApplicationRunner`) chama `QueueRecoveryService.recoverQueuedMessages()`.
+2. O serviço busca mensagens com status `QUEUED` em lotes de 100, em ordem crescente
+   de ID, usando o último ID lido como cursor (paginação por chave, sem `OFFSET`).
+   Cada mensagem é enfileirada de acordo com sua prioridade, preservando o FIFO
+   dentro de cada fila.
+3. Ao terminar, `QueueReadiness.markReady()` marca a fila como pronta.
+
+Até a fila estar pronta:
+
+- O worker (`@Scheduled`) retorna sem processar nada, o que evita consumir uma fila
+  parcialmente reconstruída.
+- `POST /messages` lança `QueueNotReadyException`, traduzida para
+  `503 Service Unavailable`, para que nenhuma mensagem nova seja registrada
+  no meio da recuperação.
+
+Como o `enqueue` ignora IDs que já estão em alguma das filas (descrito acima), a
+recuperação não duplica mensagens que tenham sido enfileiradas por outro caminho.
+
+Se a recuperação falhar (por exemplo, banco indisponível), a exceção interrompe a
+inicialização da aplicação em vez de deixá-la rodando com a fila incompleta.
+
+Mensagens em `FAILED` aguardando retry não passam por esse fluxo: elas já são
+recolocadas pelo `MessageRetryService` a cada execução do worker, a partir do banco.
 
 ## Retry e estados
 
@@ -306,9 +357,21 @@ retry e cobrança são reais. Não há `sleep` para esperar cinco segundos.
 O teste valida transações e retry invocando os services; não comprova o disparo de
 `@Scheduled`. Este pode ser verificado pelo fluxo manual de envio e consulta.
 
-Os testes de integração ainda precisam ser executados com Docker acessível antes
-da entrega: a última execução relatada falhou na descoberta do ambiente Docker,
-antes de executar os cenários. Não há afirmação de cobertura percentual neste README.
+Cobertura da fila e da recuperação (testes unitários, sem Docker):
+
+- `InMemoryMessageQueueTest`: FIFO por prioridade, alternância três urgentes para uma
+  normal, ausência de starvation, reinício da cota ao observar fila vazia, rejeição
+  de entradas inválidas e idempotência do `enqueue` (sem duplicar IDs).
+- `QueueRecoveryServiceTest`: recuperação em múltiplos lotes usando o último ID como
+  cursor, preservação da prioridade original, fila vazia e propagação de falha do banco.
+- `QueueInitializerTest`: a fila só é marcada como pronta depois que a recuperação
+  termina e permanece bloqueada se ela falha.
+- `MessageQueueWorkerTest`: retries vencidos são recolocados antes do consumo, e o
+  worker não processa nada enquanto a fila não está pronta.
+
+```bash
+./mvnw -Dtest='InMemoryMessageQueueTest,QueueRecoveryServiceTest,QueueInitializerTest,MessageQueueWorkerTest' test
+```
 
 ## Swagger / OpenAPI
 
@@ -327,11 +390,17 @@ não adiciona autenticação nem autorização à aplicação.
   planos não foram implementados.
 - Não há autorização administrativa completa.
 - Fila e contadores são locais a uma instância, sem suporte a múltiplas réplicas.
-- Restart perde a fila. O banco mantém as mensagens, mas não há reconstrução automática.
-- Commit no banco e enfileiramento não são atômicos; interrupções entre as etapas
-  podem deixar mensagens fora da fila.
+- Restart perde a fila em memória, mas mensagens `QUEUED` são reconstruídas a partir
+  do banco na inicialização. A recuperação só ocorre no startup, sem reconciliação
+  periódica. Ela é validada por testes unitários com mocks, não há teste de
+  integração que reinicie a aplicação com um banco real.
+- Commit no banco e enfileiramento não são atômicos. Se a aplicação cair entre as
+  etapas, a mensagem permanece `QUEUED` no banco e é recuperada no próximo restart;
+  se apenas o enfileiramento falhar com a aplicação no ar, ela só volta à fila
+  nesse restart.
 - Falhas inesperadas de banco/envio e interrupção após `PROCESSING` não têm recuperação
-  automática. O retry atual trata a exceção de entrega prevista.
+  automática (mensagens presas em `PROCESSING` não são recolocadas na fila). O retry
+  atual trata a exceção de entrega prevista.
 - Não há garantia de envio exatamente uma vez; integrações reais exigiriam idempotência.
 - Cache, métricas de latência e monitoramento avançado permanecem como evolução.
 
