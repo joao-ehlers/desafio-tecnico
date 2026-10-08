@@ -3,6 +3,9 @@ package com.irrah.desafio_tecnico.queue;
 import com.irrah.desafio_tecnico.message.PriorityType;
 import com.irrah.desafio_tecnico.shared.exception.InvalidInputException;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
+
 import static org.assertj.core.api.Assertions.*;
 
 class InMemoryMessageQueueTest {
@@ -74,5 +77,45 @@ class InMemoryMessageQueueTest {
         queue.enqueue(4L, PriorityType.URGENT);
         assertThat(queue.dequeue()).isEqualTo(99L);
         assertThat(queue.dequeue()).isEqualTo(4L);
+    }
+
+    @ParameterizedTest
+    @EnumSource(PriorityType.class)
+    void shouldIgnoreDuplicateIdWhileQueued(PriorityType priority) {
+        InMemoryMessageQueue queue = new InMemoryMessageQueue();
+
+        queue.enqueue(42L, priority);
+        queue.enqueue(42L, priority);
+
+        assertThat(queue.size()).isEqualTo(1);
+        assertThat(queue.dequeue()).isEqualTo(42L);
+        assertThat(queue.dequeue()).isNull();
+    }
+
+    @ParameterizedTest
+    @EnumSource(PriorityType.class)
+    void shouldAllowRequeueAfterDequeue(PriorityType priority) {
+        InMemoryMessageQueue queue = new InMemoryMessageQueue();
+
+        queue.enqueue(42L, priority);
+        assertThat(queue.dequeue()).isEqualTo(42L);
+
+        queue.enqueue(42L, priority);
+
+        assertThat(queue.size()).isEqualTo(1);
+        assertThat(queue.dequeue()).isEqualTo(42L);
+        assertThat(queue.dequeue()).isNull();
+    }
+
+    @Test
+    void shouldNotPlaceSameIdInBothQueues() {
+        InMemoryMessageQueue queue = new InMemoryMessageQueue();
+
+        queue.enqueue(42L, PriorityType.NORMAL);
+        queue.enqueue(42L, PriorityType.URGENT);
+
+        assertThat(queue.size()).isEqualTo(1);
+        assertThat(queue.dequeue()).isEqualTo(42L);
+        assertThat(queue.dequeue()).isNull();
     }
 }

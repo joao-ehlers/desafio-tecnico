@@ -12,9 +12,14 @@ public class MessageQueueWorker {
 
     private final MessageProcessingService messageProcessingService;
     private final MessageRetryService messageRetryService;
+    private final QueueReadiness readiness;
 
     @Scheduled(fixedDelayString = "${queue.worker.delay-ms:500}")
     public void processQueue(){
+        if(!readiness.isReady()){
+            return;
+        }
+
         messageRetryService.enqueueDueRetries();
         messageProcessingService.processPendingMessages();
     }

@@ -3,6 +3,8 @@ package com.irrah.desafio_tecnico.message;
 import com.irrah.desafio_tecnico.message.dto.NewMessageRequest;
 import com.irrah.desafio_tecnico.message.exception.InvalidMessageStateException;
 import com.irrah.desafio_tecnico.queue.InMemoryMessageQueue;
+import com.irrah.desafio_tecnico.queue.QueueReadiness;
+import com.irrah.desafio_tecnico.queue.exception.QueueNotReadyException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -38,14 +40,19 @@ class MessageServiceTest {
     @Mock
     private Message registeredMessage;
 
+    @Mock
+    private QueueReadiness readiness;
+
     private MessageService messageService;
+
 
     @BeforeEach
     void setUp() {
         messageService = new MessageService(
                 inMemoryMessageQueue,
                 messageRegistrationService,
-                messageRepository
+                messageRepository,
+                readiness
         );
     }
 
@@ -57,6 +64,8 @@ class MessageServiceTest {
     void shouldRegisterAndEnqueueMessageWithItsPriority(
             PriorityType priority
     ) {
+        when(readiness.isReady()).thenReturn(true);
+
         stubRegistration(priority);
 
         var response = messageService.newMessage(CLIENT_ID, request);
@@ -84,6 +93,8 @@ class MessageServiceTest {
 
     @Test
     void shouldStopBeforeEnqueueWhenRegistrationFails() {
+        when(readiness.isReady()).thenReturn(true);
+
         var failure =
                 new InvalidMessageStateException("invalid message request");
 
@@ -102,6 +113,8 @@ class MessageServiceTest {
 
     @Test
     void shouldStopBeforeEnqueueWhenRegistrationReportsPersistenceFailure() {
+        when(readiness.isReady()).thenReturn(true);
+
         var failure = new DataAccessResourceFailureException(
                 "database unavailable"
         );
@@ -121,6 +134,8 @@ class MessageServiceTest {
 
     @Test
     void shouldPropagateEnqueueFailureWithoutRegisteringAgain() {
+        when(readiness.isReady()).thenReturn(true);
+
         stubRegistration(PriorityType.NORMAL);
 
         var failure = new InvalidMessageStateException("queue unavailable");
@@ -143,11 +158,27 @@ class MessageServiceTest {
     }
 
     private void stubRegistration(PriorityType priority) {
+        when(readiness.isReady()).thenReturn(true);
+
         when(messageRegistrationService.register(CLIENT_ID, request))
                 .thenReturn(registeredMessage);
 
         when(registeredMessage.getId()).thenReturn(MESSAGE_ID);
         when(registeredMessage.getPriority()).thenReturn(priority);
         when(registeredMessage.getStatus()).thenReturn(StatusType.QUEUED);
+    }
+
+    @Test
+    void shouldRejectSubmissionBeforeRegistrationWhenQueueIsNotReady() {
+
+        assertThatThrownBy(() ->
+                messageService.newMessage(CLIENT_ID, request)
+        ).isInstanceOf(QueueNotReadyException.class);
+
+        verifyNoInteractions(
+                messageRegistrationService,
+                inMemoryMessageQueue,
+                messageRepository
+        );
     }
 }

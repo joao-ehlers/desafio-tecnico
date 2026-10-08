@@ -17,7 +17,7 @@ public class InMemoryMessageQueue {
     private final Set<Long> queuedIds = new HashSet<>();
 
     private int consecutiveUrgent = 0;
-    private final int MAX_CONSECUTIVE_URGENT = 3;
+    private static final int MAX_CONSECUTIVE_URGENT = 3;
 
     public synchronized void enqueue(Long messageId, PriorityType priorityType){
         if(messageId == null){
@@ -57,6 +57,7 @@ public class InMemoryMessageQueue {
 
         this.consecutiveUrgent = 0;
         messageId = normalQueue.poll();
+        queuedIds.remove(messageId);
         return messageId;
     }
 
