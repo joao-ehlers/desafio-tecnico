@@ -100,4 +100,18 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
             @Param("status") StatusType status,
             Pageable pageable
     );
+
+    @Query("""
+            select m
+            from Message m
+            where m.status = :status
+                and m.id > :lastId
+            order by m.id
+            """)
+    List<Message> findRecoveryBatch(
+            @Param("lastId") Long lastId,
+            @Param("status") StatusType status,
+            Pageable pageable
+    );
+
 }

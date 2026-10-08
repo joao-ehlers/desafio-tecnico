@@ -5,6 +5,8 @@ import com.irrah.desafio_tecnico.message.dto.NewMessageRequest;
 import com.irrah.desafio_tecnico.message.dto.NewMessageResponse;
 import com.irrah.desafio_tecnico.message.exception.MessageNotFoundException;
 import com.irrah.desafio_tecnico.queue.InMemoryMessageQueue;
+import com.irrah.desafio_tecnico.queue.QueueReadiness;
+import com.irrah.desafio_tecnico.queue.exception.QueueNotReadyException;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -16,8 +18,13 @@ public class MessageService {
     private final InMemoryMessageQueue inMemoryMessageQueue;
     private final MessageRegistrationService messageRegistrationService;
     private final MessageRepository messageRepository;
+    private final QueueReadiness readiness;
 
     public NewMessageResponse newMessage(Long id, NewMessageRequest request){
+        if (!readiness.isReady()) {
+            throw new QueueNotReadyException();
+        }
+
         Message message =  messageRegistrationService.register(id, request);
 
         NewMessageResponse response = NewMessageResponse.builder()

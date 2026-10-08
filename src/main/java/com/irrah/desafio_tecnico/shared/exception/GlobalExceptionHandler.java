@@ -7,6 +7,7 @@ import com.irrah.desafio_tecnico.client.exception.*;
 import com.irrah.desafio_tecnico.conversation.exception.ConversationNotFoundException;
 import com.irrah.desafio_tecnico.conversation.exception.RecipientNotFoundException;
 import com.irrah.desafio_tecnico.message.exception.InvalidMessageStateException;
+import com.irrah.desafio_tecnico.queue.exception.QueueNotReadyException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
@@ -178,6 +179,20 @@ public class GlobalExceptionHandler {
         problem.setTitle("Operação não permitida no estado atual");
 
         return ResponseEntity.status(HttpStatus.CONFLICT).body(problem);
+    }
+
+    @ExceptionHandler(QueueNotReadyException.class)
+    public ResponseEntity<ProblemDetail> handleQueueNotReady(
+            QueueNotReadyException exception
+    ) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                HttpStatus.SERVICE_UNAVAILABLE,
+                exception.getMessage()
+        );
+        problem.setTitle("Fila em inicialização");
+
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(problem);
     }
 
     private ProblemDetail problem(
